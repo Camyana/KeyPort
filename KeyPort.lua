@@ -1855,38 +1855,108 @@ SlashCmdList["KEYPORT"] = HandleSlash
 
 -------------------------------------------------------------------------------
 --  /keys takeover
---  Several addons register /keys for their own keystone window. Claiming it
---  outright would be rude, so the default is "auto": KeyPort takes /keys only
---  when nothing else has claimed it by the time we log in. "force" takes it
---  regardless, "off" leaves it alone. Run at PLAYER_LOGIN, once every addon
---  has had its turn to register.
+--  Several addons register /keys for their own keystone window, and the chat
+--  system resolves a command through hash_SlashCmdList, which is rebuilt from
+--  every SLASH_<NAME><n> global. Two addons claiming /keys therefore race, and
+--  the winner comes down to the pairs() order over SlashCmdList: writing our
+--  own hash entry is not enough, because the next rebuild can undo it.
+--
+--  So instead of competing we take the name off the other addon: /keys is
+--  removed from its alias list (its remaining aliases are shifted down so the
+--  importer, which stops at the first gap, still sees them) and registered to
+--  us. Their other commands keep working, and any later rebuild can only
+--  resolve /keys to KeyPort. It is all remembered, so /kp keys off puts every
+--  alias back exactly as it was.
 -------------------------------------------------------------------------------
-local previousKeysOwner   -- whoever had /keys before we took it
+local KEYS_ALIAS = "/keys"
+local displacedAliases = {}   -- [slash name] = { original alias list }
+
+-- The aliases registered under one SlashCmdList name, in order.
+local function AliasesOf(name)
+    local list = {}
+    for i = 1, 32 do
+        local alias = _G["SLASH_" .. name .. i]
+        if not alias then break end
+        list[#list + 1] = alias
+    end
+    return list
+end
+
+local function WriteAliases(name, list)
+    for i = 1, 32 do
+        _G["SLASH_" .. name .. i] = list[i] or nil
+    end
+end
+
+-- Every registration except ours that answers to /keys.
+local function OtherKeysOwners()
+    local owners = {}
+    for name in pairs(SlashCmdList) do
+        if name ~= "KEYPORT" then
+            for _, alias in ipairs(AliasesOf(name)) do
+                if type(alias) == "string" and alias:lower() == KEYS_ALIAS then
+                    owners[#owners + 1] = name
+                    break
+                end
+            end
+        end
+    end
+    return owners
+end
+
+local function ReleaseKeys()
+    for name, original in pairs(displacedAliases) do
+        WriteAliases(name, original)
+        displacedAliases[name] = nil
+    end
+    for i = 1, 32 do
+        if _G["SLASH_KEYPORT" .. i] == KEYS_ALIAS then _G["SLASH_KEYPORT" .. i] = nil end
+    end
+    if _G.hash_SlashCmdList then _G.hash_SlashCmdList["/KEYS"] = nil end
+    if _G.ChatFrame_ImportAllListsToHash then pcall(_G.ChatFrame_ImportAllListsToHash) end
+end
 
 ClaimKeysCommand = function()
     local mode = db.keysCommand or "force"
     local mine = SlashCmdList["KEYPORT"]
-    local hash = _G.hash_SlashCmdList
-    local taken = hash and hash["/KEYS"]
 
     if mode == "off" then
-        -- Hand it back if we are the ones holding it.
-        if hash and taken == mine and previousKeysOwner then
-            hash["/KEYS"] = previousKeysOwner
-            previousKeysOwner = nil
-        end
+        if next(displacedAliases) then ReleaseKeys() end
         return false
     end
 
-    if taken == mine then return true end
-    if mode == "auto" and taken then return false end
+    local owners = OtherKeysOwners()
+    if mode == "auto" and #owners > 0 and not next(displacedAliases) then
+        return false   -- someone else got there first and we are being polite
+    end
 
-    if taken then previousKeysOwner = previousKeysOwner or taken end
-    SLASH_KEYPORT3 = "/keys"
-    -- The chat system resolves slash commands through this hash, and it is
-    -- already built by the time we run, so write it directly rather than
-    -- hoping our SLASH_ global is imported after everyone else's.
-    if hash then hash["/KEYS"] = mine end
+    -- Take /keys off everyone else, keeping their other aliases contiguous.
+    for _, name in ipairs(owners) do
+        local original = AliasesOf(name)
+        if not displacedAliases[name] then
+            local copy = {}
+            for i, alias in ipairs(original) do copy[i] = alias end
+            displacedAliases[name] = copy
+        end
+        local kept = {}
+        for _, alias in ipairs(original) do
+            if alias:lower() ~= KEYS_ALIAS then kept[#kept + 1] = alias end
+        end
+        WriteAliases(name, kept)
+    end
+
+    -- Register it to us, on the first free SLASH_KEYPORT slot.
+    local slot
+    for i = 1, 32 do
+        local existing = _G["SLASH_KEYPORT" .. i]
+        if existing == KEYS_ALIAS then slot = i; break end
+        if not existing then slot = slot or i end
+    end
+    _G["SLASH_KEYPORT" .. (slot or 3)] = KEYS_ALIAS
+
+    -- Point the live hash at us now, then let the importer confirm it.
+    if _G.hash_SlashCmdList then _G.hash_SlashCmdList["/KEYS"] = mine end
+    if _G.ChatFrame_ImportAllListsToHash then pcall(_G.ChatFrame_ImportAllListsToHash) end
     return true
 end
 

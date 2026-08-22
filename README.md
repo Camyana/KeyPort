@@ -103,8 +103,10 @@ not simply take it. `/kp keys` controls that:
 * `auto` claims `/keys` only if nothing else has it when you log in.
 * `off` leaves it alone entirely.
 
-KeyPort remembers the previous owner, so `off` hands `/keys` straight back, and
-a mode you set yourself is never overridden by a future default.
+KeyPort takes the `/keys` alias off the other addon rather than competing for
+it, so the result does not depend on load order. That addon's other commands
+are untouched, `off` restores every alias exactly as it was, and a mode you set
+yourself is never overridden by a future default.
 
 ## Notes
 

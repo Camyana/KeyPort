@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.2
+
+- **Fixed `/keys` still opening another addon's window.** Writing our own entry
+  into the chat system's command hash was not enough: that hash is rebuilt from
+  every `SLASH_<NAME><n>` global, so two addons claiming `/keys` raced and the
+  winner came down to table order. KeyPort now takes the alias off the other
+  addon instead of competing with it, which is deterministic. The other addon's
+  remaining aliases are shifted down so they keep working, and `/kp keys off`
+  restores every alias exactly as it was.
+
 ## 1.3.1
 
 First CurseForge release. No changes to the addon itself: this version wires up
