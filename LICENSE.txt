@@ -1,0 +1,13 @@
+Custom License for: KeyPort
+
+Copyright (c) 2026. All rights reserved.
+
+KeyPort is an independent addon. It has no dependencies, embeds no libraries and
+redistributes no other author's files.
+
+Dungeon challenge-mode map IDs and teleport spell IDs are World of Warcraft game
+data assigned by Blizzard Entertainment; dungeon names are read from the game
+client at runtime and are never stored in this addon.
+
+All rights not explicitly addressed in this license are reserved by the
+copyright holder.

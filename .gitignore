@@ -1,0 +1,13 @@
+# Build output: release zips are attached to releases, not committed.
+dist/
+
+# The original EllesmereUI companion version, kept locally for reference only.
+# It is adapted from EllesmereUI, which is all rights reserved, so it must not
+# be redistributed.
+legacy-ellesmereui-companion/
+
+# Editor and OS noise
+*.bak
+*~
+Thumbs.db
+desktop.ini

@@ -1,0 +1,21 @@
+package-as: KeyPort
+
+enable-nolib-creation: no
+
+# LibStub and LibKeystone are vendored under Libs/ on purpose rather than
+# declared as externals: the packager would fetch them at build time, but the
+# repo stays buildable offline this way. Refresh them from the upstream
+# CurseForge project (slug: libkeystone) when it updates.
+
+ignore:
+  - .github
+  - dist
+  - design
+  - tools
+  - legacy-ellesmereui-companion
+  - CURSEFORGE-DESCRIPTION.md
+  - curseforge-description.html
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown

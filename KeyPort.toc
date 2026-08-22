@@ -1,0 +1,20 @@
+## Interface: 120000, 120001, 120005, 120007, 120100
+## Title: KeyPort
+## Notes: Pick a keystone from your group and put the dungeon teleport on everyone's screen. /kp
+## Author: Camyana
+## Version: 1.3.0
+## SavedVariables: KeyPortDB
+## IconTexture: Interface\Icons\Spell_Arcane_PortalStormwind
+## X-License: All Rights Reserved
+## X-Category: Group & Raid
+# Fill in once the CurseForge project exists -- the packager uses it to pick
+# the upload target:
+# ## X-Curse-Project-ID: 000000
+
+# LibKeystone is the keystone-sharing library DBM and BigWigs embed. Sharing
+# it means the group's keys show up from anyone running one of those, not just
+# from other KeyPort users.
+Libs\LibStub\LibStub.lua
+Libs\LibKeystone\LibKeystone.lua
+
+KeyPort.lua

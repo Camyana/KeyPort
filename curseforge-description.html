@@ -1,0 +1,112 @@
+<!--
+  Paste this into the CurseForge description editor's HTML / source view.
+  The editor does not render Markdown, so use this file rather than the .md.
+  Put keyport-banner.png full width above the first paragraph
+  (upload it in the editor, then drag it to the top).
+-->
+
+<p>Everyone's in the group, the key's in the bag, and the run stalls anyway: <em>"which dungeon is it again?"</em>, three people hearth, one flies the wrong way.</p>
+
+<p>Group Finder addons pop a teleport reminder when you join a <strong>listed</strong> group. Nothing does it for the premade key you put together in guild chat or Discord.</p>
+
+<p><strong>KeyPort</strong> closes that gap with one command:</p>
+
+<pre><code>/kp KR 10</code></pre>
+
+<p>Kings' Rest, +10, a one-click teleport button, on your screen and on the screen of every group member who also runs KeyPort. No chat spam, no links to click, no alt-tabbing to look up which dungeon a keystone belongs to.</p>
+
+<h3>Pick a key, send it</h3>
+
+<p><code>/kp</code> opens the group's keystones: every party member with their portrait, their dungeon and its icon, their key level, and their name in class colour. Click one, hit <strong>Send to Party</strong>, and that dungeon's teleport lands on everyone's screen with the owner named on it.</p>
+
+<p><strong>Party and Guild tabs</strong>, so you can see what your guildmates are carrying as well, a <strong>Mythic+ score</strong> column, and a resize grip in the bottom right: taller for more rows, narrower for a compact list. Size and position are saved.</p>
+
+<p>A level shows <strong>green with an up arrow</strong> when the key is above your own season best for that dungeon, or in a dungeon you have never completed; gold when it is at or below your best. Each person sees it against their own record.</p>
+
+<p>Sending a key also posts one line in party chat, so the people without KeyPort know which dungeon was picked: <code>KeyPort: Kings' Rest +12 (Bobbo's key)</code>.</p>
+
+<p>Keys arrive over LibKeystone, the library DBM and BigWigs already embed, so the list fills in from party members running any of those. Only <em>you</em> need KeyPort to raise the reminder.</p>
+
+<p>Prefer to type it? Every command below still works.</p>
+
+<h3>Commands</h3>
+
+<pre><code>/kp &lt;dungeon&gt; &lt;keystone level&gt;</code></pre>
+
+<p>The number is the <strong>keystone level</strong>: <code>/kp kr 10</code> means Kings' Rest, key level 10.</p>
+
+<table>
+  <thead>
+    <tr><th>Command</th><th>What it does</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>/kp kr 10</code></td><td>Reminder for Kings' Rest at key level 10, for you and your party or raid</td></tr>
+    <tr><td><code>/kp kings rest 12</code></td><td>Match by name; partial names work too (<code>/kp murder</code>)</td></tr>
+    <tr><td><code>/kp kr10</code></td><td>Level glued to the code, if you type fast</td></tr>
+    <tr><td><code>/kp</code></td><td>Opens the group's keystone list</td></tr>
+    <tr><td><code>/kp mine</code></td><td>Uses the keystone in your own bags</td></tr>
+    <tr><td><code>/kp me KR 10</code></td><td>Shows it only for you, no broadcast</td></tr>
+    <tr><td><code>/kp hide</code></td><td>Closes the popup for the whole group</td></tr>
+    <tr><td><code>/kp list</code></td><td>This season's codes (<code>/kp list all</code> for every dungeon)</td></tr>
+    <tr><td><code>/kp share</code></td><td>Toggle whether you receive reminders from your group</td></tr>
+    <tr><td><code>/kp announce</code></td><td>Toggle the party chat line sent when a key goes out</td></tr>
+    <tr><td><code>/kp guild</code></td><td>Open the list on the guild tab</td></tr>
+    <tr><td><code>/kp keys off|auto|force</code></td><td>Whether <code>/keys</code> opens KeyPort</td></tr>
+    <tr><td><code>/kp scale 1.2</code></td><td>Resize the popup</td></tr>
+    <tr><td><code>/kp map &lt;dungeon&gt; &lt;spellID&gt;</code></td><td>Teach KeyPort a teleport it doesn't know yet (a teleport spell id, not a key level)</td></tr>
+  </tbody>
+</table>
+
+<p><code>/keyport</code> is an alias for <code>/kp</code>.</p>
+
+<h3>Codes you don't have to learn</h3>
+
+<p>Short codes are generated from the dungeon's own name <strong>as your client spells it</strong>, so they work in every language and there is no list to memorise or maintain:</p>
+
+<p><code>KR</code> Kings' Rest &middot; <code>DoN</code> Den of Nalorakk &middot; <code>BV</code> The Blinding Vale &middot; <code>HoV</code> Halls of Valor &middot; <code>CoS</code> Court of Stars &middot; <code>Sky</code> Skyreach</p>
+
+<p>Type the code, part of the name, or the whole name. The current season wins ties, and if a query is still ambiguous KeyPort lists the candidates instead of guessing.</p>
+
+<h3>Details</h3>
+
+<ul>
+  <li>Drag the popup anywhere; position and scale are saved.</li>
+  <li>The teleport button shows the real spell icon and its cooldown swipe, and greys out with <em>Teleport not learned</em> if you haven't earned that teleport yet.</li>
+  <li>Auto-hides when you enter the dungeon, leave the group, or enter combat.</li>
+  <li>The footer tells you where it came from: <em>Sent to your party</em>, or <em>Shared by &lt;name&gt;</em>.</li>
+  <li>Nothing runs on a timer, and no addon is required: LibKeystone rides along inside KeyPort.</li>
+</ul>
+
+<h3>Quiet and safe by design</h3>
+
+<ul>
+  <li><strong>One line of chat, not a stream.</strong> Sending a key posts a single party chat line so members without KeyPort know the dungeon; it never fires on selecting a row, never repeats itself, and <code>/kp announce</code> turns it off entirely.</li>
+  <li>Communication uses the <code>KeyPort</code> addon channel on PARTY / RAID / INSTANCE_CHAT only, and an incoming message can only <em>select</em> an entry from your own local dungeon table. A spell ID KeyPort doesn't recognise is dropped, so nobody can put an arbitrary spell on your teleport button.</li>
+  <li>Secure-frame correct: the teleport button is built once at login out of combat, and any attribute write, show or hide that lands mid-combat is queued until combat ends. No taint, no blocked actions.</li>
+</ul>
+
+<h3>The /keys command</h3>
+
+<p><code>/keys</code> opens KeyPort, even if another addon already registered it. If you would rather keep that addon's window, <code>/kp keys auto</code> yields to whoever has it and <code>/kp keys off</code> leaves it alone; KeyPort remembers the previous owner, so it hands <code>/keys</code> straight back.</p>
+
+<h3>When it stays out of the way</h3>
+
+<ul>
+  <li><strong>Raid groups.</strong> KeyPort is a five-player tool, so in a raid every command is refused.</li>
+  <li><strong>During a Mythic+ run.</strong> Nothing fires once the key is in, and starting a run closes anything already open.</li>
+  <li><strong>In combat.</strong> Your command is not thrown away, it waits: the keystone list opens, and a queued reminder appears, the moment combat ends.</li>
+</ul>
+
+<h3>New season, new dungeon?</h3>
+
+<p>The dungeon pool comes from the game client, so a new season just works. If Blizzard adds a brand-new dungeon before an update ships, teach it yourself:</p>
+
+<pre><code>/kp map &lt;dungeon&gt; &lt;spellID&gt;</code></pre>
+
+<p>and it's stored in your SavedVariables.</p>
+
+<h3>Requirements</h3>
+
+<p>Retail World of Warcraft. Nothing else: LibKeystone is embedded, so there is no addon to install alongside it.</p>
+
+<p>Found a bug, or want it to do something it doesn't? Leave a comment.</p>
