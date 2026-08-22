@@ -21,6 +21,10 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # A new repository hands GITHUB_TOKEN read-only permissions, and the
+    # packager needs to create the GitHub release and attach the zip to it.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
