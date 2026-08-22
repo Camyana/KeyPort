@@ -9,6 +9,7 @@
 | **Summary** | Pick a keystone from your group and put the dungeon teleport on everyone's screen. Built for premade Mythic+ keys. |
 | **Game** | World of Warcraft (Retail) |
 | **Categories** | Group & Raid (secondary: Miscellaneous) |
+| **Project ID** | 1662985 (in `KeyPort.toc` as `X-Curse-Project-ID`) |
 | **Game versions** | Match the ids in `KeyPort.toc`; current is `120100` |
 | **License** | All Rights Reserved (see `LICENSE.txt`) |
 | **Dependencies** | None. LibStub and LibKeystone are embedded, not required installs |

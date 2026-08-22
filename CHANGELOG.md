@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+First CurseForge release. No changes to the addon itself: this version wires up
+the CurseForge project so that tagging a release publishes it automatically.
+
 ## 1.3.0
 
 - **A guild tab.** The window now has Party and Guild tabs; the guild tab lists
