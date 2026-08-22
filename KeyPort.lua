@@ -844,8 +844,8 @@ local LIST_PAD     = 8          -- inset from the window edge to a row
 local TAB_H        = 22
 local COLHDR_H     = 14
 local SCORE_W      = 36
-local LEVEL_W      = 34
 local NAME_W       = 64
+local ROW_FONT     = 10
 
 local keystones = {}            -- party: [short name] = { mapID, level, rating, at }
 local guildKeys = {}            -- guild: same shape
@@ -1110,7 +1110,7 @@ local function BuildRow(parent, index)
     end)
     row.avatarMask = ok and mask or nil
 
-    row.player = Label(row, 11, 1, 1, 1)
+    row.player = Label(row, ROW_FONT, 1, 1, 1)
     row.player:SetJustifyH("LEFT")
     row.player:SetWordWrap(false)
 
@@ -1123,16 +1123,13 @@ local function BuildRow(parent, index)
     row.dungeonEdge:SetPoint("CENTER", row.dungeonIcon, "CENTER")
     row.dungeonEdge:SetColorTexture(0, 0, 0, 0.55)
 
-    row.dungeon = Label(row, 11, 1, 1, 1)
+    row.dungeon = Label(row, ROW_FONT, 1, 1, 1)
     row.dungeon:SetJustifyH("LEFT")
     row.dungeon:SetWordWrap(false)
 
-    row.score = Label(row, 11, 0.9, 0.9, 0.9)
+    row.score = Label(row, ROW_FONT, 0.9, 0.9, 0.9)
     row.score:SetJustifyH("RIGHT")
     row.score:SetWordWrap(false)
-
-    row.level = Label(row, 11, 1, 0.82, 0)
-    row.level:SetJustifyH("RIGHT")
 
     row:SetScript("OnEnter", function(self)
         if not self.owner then return end
@@ -1191,20 +1188,16 @@ local function LayoutRow(row, width)
     row.dungeonIcon:ClearAllPoints()
     row.dungeonIcon:SetPoint("LEFT", xIcon, 0)
 
-    local rightLevel = -4
-    row.level:ClearAllPoints()
-    row.level:SetPoint("RIGHT", rightLevel, 0)
-    row.level:SetWidth(LEVEL_W)
-
     row.score:ClearAllPoints()
-    row.score:SetPoint("RIGHT", rightLevel - LEVEL_W - 2, 0)
+    row.score:SetPoint("RIGHT", -4, 0)
     row.score:SetWidth(SCORE_W)
 
     local xDungeon = xIcon + DUNGEON_SZ + 4
+    local dungeonWidth = math.max(28, inner - xDungeon - SCORE_W - 10)
     row.dungeon:ClearAllPoints()
     row.dungeon:SetPoint("LEFT", xDungeon, 0)
-    row.dungeon:SetWidth(math.max(28, inner - xDungeon - LEVEL_W - SCORE_W - 10))
-    row.dungeonWidth = math.max(28, inner - xDungeon - LEVEL_W - SCORE_W - 10)
+    row.dungeon:SetWidth(dungeonWidth)
+    row.dungeonWidth = dungeonWidth
 end
 
 local function LayoutList()
@@ -1227,7 +1220,7 @@ local function LayoutList()
     keyList.colKey:SetPoint("TOPLEFT", LIST_PAD + 3 + AVATAR_SZ + 5 + NAME_W + 4,
                             -(HEADER_H + TAB_H + 2))
     keyList.colScore:ClearAllPoints()
-    keyList.colScore:SetPoint("TOPRIGHT", -(LIST_PAD + 4 + LEVEL_W + 2), -(HEADER_H + TAB_H + 2))
+    keyList.colScore:SetPoint("TOPRIGHT", -(LIST_PAD + 4), -(HEADER_H + TAB_H + 2))
 end
 
 local function BuildKeyList()
@@ -1456,20 +1449,12 @@ function KeyPort.RefreshKeyList()
 
             local above, best = AboveSeasonBest(data.mapID, data.level)
             row.above, row.best = above, best or false
-            local levelText = data.level > 0 and (UpArrowMarkup() .. "+" .. data.level) or ""
-            if above then
-                row.level:SetTextColor(0.25, 0.88, 0.44)
-            else
-                row.level:SetTextColor(1, 0.82, 0)
-                levelText = data.level > 0 and ("+" .. data.level) or ""
-            end
+            -- The level sits with the name rather than in its own column, so
+            -- its colour and arrow travel inline.
+            local levelText = LevelMarkup(data.mapID, data.level)
 
             local dungeon, spellID, icon, code
             if data.mapID then dungeon, spellID, icon, code = DungeonName(data.mapID) end
-
-            -- In a narrow window the short code stands in for the full name.
-            local label = dungeon
-            if dungeon and code and (row.dungeonWidth or 0) < 80 then label = code end
 
             if icon and data.level > 0 then
                 row.dungeonIcon:SetTexture(icon)
@@ -1486,22 +1471,24 @@ function KeyPort.RefreshKeyList()
                 row.selectable = false
                 row.dungeon:SetText("no keystone")
                 row.dungeon:SetTextColor(0.45, 0.47, 0.5)
-                row.level:SetText("")
             elseif not dungeon then
                 row.selectable = false
-                row.dungeon:SetText("unknown dungeon")
+                row.dungeon:SetText("unknown dungeon  " .. levelText)
                 row.dungeon:SetTextColor(0.45, 0.47, 0.5)
-                row.level:SetText(levelText)
-            elseif not spellID then
-                row.selectable = false
-                row.dungeon:SetText(label .. " (no teleport)")
-                row.dungeon:SetTextColor(0.55, 0.5, 0.45)
-                row.level:SetText(levelText)
             else
-                row.selectable = true
-                row.dungeon:SetText(label)
-                row.dungeon:SetTextColor(0.92, 0.94, 0.96)
-                row.level:SetText(levelText)
+                local suffix = spellID and "" or " (no teleport)"
+                row.selectable = spellID and true or false
+                row.dungeon:SetTextColor(spellID and 0.92 or 0.55,
+                                         spellID and 0.94 or 0.5,
+                                         spellID and 0.96 or 0.45)
+                -- Prefer the full name, but never at the cost of the level:
+                -- if the pair does not fit, the short code stands in. Measured
+                -- rather than guessed from the window width, because the name
+                -- lengths vary wildly between dungeons and languages.
+                row.dungeon:SetText(dungeon .. suffix .. "  " .. levelText)
+                if code and (row.dungeon:GetStringWidth() or 0) > (row.dungeonWidth or 0) then
+                    row.dungeon:SetText(code .. suffix .. "  " .. levelText)
+                end
             end
             row.dungeonName = dungeon
 

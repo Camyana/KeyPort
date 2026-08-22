@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.3
+
+- The keystone level now sits beside the dungeon name rather than in a column
+  of its own, which frees the width the name was being clipped in.
+- Row text is a point smaller.
+- When a name and its level will not fit together, the short dungeon code
+  stands in rather than the level being cut off. The window measures the text
+  instead of guessing from its width, so it adapts to long names and to
+  languages with longer ones.
+
 ## 1.3.2
 
 - **Fixed `/keys` still opening another addon's window.** Writing our own entry

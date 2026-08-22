@@ -59,7 +59,8 @@ PANEL_H = FOOTER_Y + FOOTER_H + 9
 LIST_W, ROW_H, MAX_ROWS = 320, 26, 5
 AVATAR_SZ, DUNGEON_SZ = 20, 18
 LIST_PAD, TAB_H, COLHDR_H = 8, 22, 14
-NAME_W, SCORE_W, LEVEL_W = 64, 36, 34
+NAME_W, SCORE_W = 64, 36
+ROW_FONT = 10
 
 # --- palette ---------------------------------------------------------------
 ACCENT = (89, 199, 255)
@@ -319,7 +320,7 @@ def picker(scale=3, rows=None, chosen=1, tab="Party"):
     f_title = font(UI_FONT, 11 * S)
     f_tab = font(UI_FONT, 11 * S)
     f_col = font(UI_FONT_REG, 9 * S)
-    f_row = font(UI_FONT, 11 * S)
+    f_row = font(UI_FONT, ROW_FONT * S)
     f_choice = font(UI_FONT, 11 * S)
     f_btn = font(UI_FONT, 11 * S)
 
@@ -351,8 +352,7 @@ def picker(scale=3, rows=None, chosen=1, tab="Party"):
     x_name = x0 + (3 + AVATAR_SZ + 5) * S
     x_icon = x_name + (NAME_W + 4) * S
     x_dungeon = x_icon + (DUNGEON_SZ + 4) * S
-    right_level = x1 - 4 * S
-    right_score = right_level - (LEVEL_W + 2) * S
+    right_score = x1 - 4 * S
 
     col_y = (HEADER_H + TAB_H + 2) * S
     text(img, (x0 + 3 * S, col_y), "PLAYER", f_col, (115, 128, 143), offset=S / 4)
@@ -381,17 +381,18 @@ def picker(scale=3, rows=None, chosen=1, tab="Party"):
         text(img, (x_dungeon, mid), dungeon, f_row,
              (235, 240, 245) if keyed else (115, 120, 128), anchor="lm", offset=S / 4)
 
+        if keyed:
+            cursor = x_dungeon + width_of(dungeon, f_row) + 7 * S
+            if above:
+                mark = up_arrow(round(9 * S), ABOVE)
+                img.alpha_composite(mark, (round(cursor), round(mid - mark.height / 2)))
+                cursor += mark.width + 2 * S
+            text(img, (cursor, mid), "+%d" % level, f_row, ABOVE if above else GOLD,
+                 anchor="lm", offset=S / 4)
+
         if score:
             text(img, (right_score, mid), str(score), f_row, (176, 140, 224),
                  anchor="rm", offset=S / 4)
-        if keyed:
-            text(img, (right_level, mid), "+%d" % level, f_row, ABOVE if above else GOLD,
-                 anchor="rm", offset=S / 4)
-            if above:
-                mark = up_arrow(round(9 * S), ABOVE)
-                lvl_w = width_of("+%d" % level, f_row)
-                img.alpha_composite(mark, (round(right_level - lvl_w - mark.width - S),
-                                           round(mid - mark.height / 2)))
 
     # selection line
     choice_y = (top + 10) * S
