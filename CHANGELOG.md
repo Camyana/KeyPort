@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.0
+
+- **An Alts tab.** Every character on the account that has logged in with
+  KeyPort is listed with the keystone it is holding, its level and its Mythic+
+  rating, so you can see at a glance which alt is carrying the key you want.
+  `/kp alts` opens it.
+- Keystones reset weekly, so a key recorded before the last reset is shown as
+  *last week's key* rather than pretending to still exist, and cannot be sent.
+- An alt's key can be selected and sent to the party like any other, which is
+  handy when the answer to "whose key?" is "give me a minute, I'll swap".
+- Right-click a character to forget it, or `/kp alts clear` to forget all but
+  the one you are on. Characters are recorded at login, on opening the tab, and
+  a few seconds after finishing a run.
+
 ## 1.4.1
 
 - **You now choose which keys go on the ballot.** Vote no longer puts every key

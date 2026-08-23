@@ -21,7 +21,7 @@ colour. Click a key to select it,
 then **Send to Party** puts that dungeon's teleport on everyone's screen, with
 the owner named on the popup.
 
-The window has **Party** and **Guild** tabs, a **Mythic+ score** column, and a
+The window has **Party**, **Guild** and **Alts** tabs, a **Mythic+ score** column, and a
 grip in the bottom right to resize it. Make it taller for more rows (the guild
 list scrolls with the wheel), narrower to fall back to short dungeon codes.
 Size and position are saved.
@@ -72,6 +72,7 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp vote` | Choose keys for a ballot, then Start (`/kp vote 45` sets the length) |
 | `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
+| `/kp alts` | Your other characters' keystones (`/kp alts clear` forgets them) |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
 | `/kp map <dungeon> <spellID>` | Teach it a teleport it doesn't know yet (a teleport *spell id*, not a key level) |
@@ -98,6 +99,14 @@ lists the candidates instead of guessing.
   with "Teleport not learned" if you haven't earned that teleport.
 * Auto-hides when you enter the dungeon, leave the group, or enter combat.
 * Footer shows where it came from: *Sent to your party*, or *Shared by \<name\>*.
+
+## Your alts
+
+Every character that logs in with KeyPort records the keystone it is holding,
+so the **Alts** tab answers "which of mine has the good key?" without logging
+in to find out. Keys from before the weekly reset are shown as *last week's
+key* rather than pretending to still exist. Right-click a character to forget
+it.
 
 ## When KeyPort stays out of the way
 

@@ -56,8 +56,8 @@ alt-tabbing to look up which dungeon a keystone belongs to.
 their dungeon and its icon, their key level, and their name in class colour. Click one, hit **Send to Party**, and
 that dungeon's teleport lands on everyone's screen with the owner named on it.
 
-**Party and Guild tabs**, so you can see what your guildmates are carrying as
-well, a **Mythic+ score** column, and a resize grip in the bottom right: taller
+**Party, Guild and Alts tabs**, so you can see what your guildmates are
+carrying and which of your own characters is holding the good key, a **Mythic+ score** column, and a resize grip in the bottom right: taller
 for more rows, narrower for a compact list. Size and position are saved.
 
 ### Or put it to a vote
@@ -108,6 +108,7 @@ The number is the **keystone level**: `/kp kr 10` means Kings' Rest, key level 1
 | `/kp vote` | Choose keys for a ballot, then Start (`/kp vote 45` sets the length) |
 | `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
+| `/kp alts` | Your other characters' keystones (`/kp alts clear` forgets them) |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
 | `/kp map <dungeon> <spellID>` | Teach KeyPort a teleport it doesn't know yet (a teleport spell id, not a key level) |

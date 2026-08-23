@@ -162,6 +162,7 @@ local function InitDB()
     end
     db.scale  = tonumber(db.scale) or 1
     db.custom = db.custom or {}   -- [challengeMapID] = spellID, user supplied
+    db.alts   = db.alts   or {}   -- ["Name-Realm"] = this character's keystone
     return db
 end
 
@@ -877,6 +878,53 @@ local function Store(tab)
     return tab == "GUILD" and guildKeys or keystones
 end
 
+-- Keystones reset weekly, so anything recorded before this week's reset is
+-- last week's key and no longer real.
+local function WeekStart()
+    if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
+        local ok, secs = pcall(C_DateAndTime.GetSecondsUntilWeeklyReset)
+        if ok and type(secs) == "number" and secs > 0 then
+            return (time and time() or 0) + secs - 604800
+        end
+    end
+    return 0
+end
+
+local function FullName(name, realm)
+    realm = (realm and realm ~= "" and realm) or (GetRealmName and GetRealmName()) or "?"
+    return name .. "-" .. (realm:gsub("%s+", ""))
+end
+
+--- Record this character's keystone in the account-wide list.
+function KeyPort.RecordOwnKeystone()
+    if not db or not C_MythicPlus then return end
+    local name = UnitName("player")
+    if not name then return end
+
+    local mapID = C_MythicPlus.GetOwnedKeystoneChallengeMapID
+                  and C_MythicPlus.GetOwnedKeystoneChallengeMapID() or 0
+    local level = C_MythicPlus.GetOwnedKeystoneLevel
+                  and C_MythicPlus.GetOwnedKeystoneLevel() or 0
+    local rating = 0
+    if C_PlayerInfo and C_PlayerInfo.GetPlayerMythicPlusRatingSummary then
+        local ok, summary = pcall(C_PlayerInfo.GetPlayerMythicPlusRatingSummary, "player")
+        if ok and type(summary) == "table" and type(summary.currentSeasonScore) == "number" then
+            rating = summary.currentSeasonScore
+        end
+    end
+    local _, classFile = UnitClass("player")
+
+    db.alts[FullName(name)] = {
+        name = name,
+        realm = (GetRealmName and GetRealmName()) or "?",
+        classFile = classFile,
+        mapID = (mapID or 0) > 0 and mapID or nil,
+        level = level or 0,
+        rating = rating,
+        updated = (time and time()) or 0,
+    }
+end
+
 -- Everyone in the party, player first, in roster order.
 local function Roster()
     local members = { { name = ShortUnitName("player"), unit = "player" } }
@@ -1180,6 +1228,10 @@ local function BuildRow(parent, index)
         if (self.rating or 0) > 0 then
             GameTooltip:AddLine("Mythic+ rating: " .. self.rating, 0.7, 0.7, 0.7)
         end
+        if self.realm then
+            GameTooltip:AddLine(self.realm, 0.5, 0.52, 0.56)
+            GameTooltip:AddLine("Right-click to forget this character.", 0.6, 0.63, 0.68, true)
+        end
         if self.selectable then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine("Click to select, then Send to Party.", 0.6, 0.63, 0.68, true)
@@ -1188,7 +1240,17 @@ local function BuildRow(parent, index)
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    row:SetScript("OnClick", function(self)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then
+            if activeTab == "ALTS" and self.fullName and db.alts[self.fullName] then
+                db.alts[self.fullName] = nil
+                if selection and selection.name == self.owner then selection = nil end
+                Print("forgot " .. self.owner .. ".")
+                KeyPort.RefreshKeyList()
+            end
+            return
+        end
         if not self.selectable then return end
         if composing then
             ballotPick[self.owner] = (not ballotPick[self.owner]) or nil
@@ -1309,9 +1371,11 @@ local function BuildKeyList()
     keyList.tabs = {
         TabButton(keyList, "Party", "PARTY"),
         TabButton(keyList, "Guild", "GUILD"),
+        TabButton(keyList, "Alts", "ALTS"),
     }
     keyList.tabs[1]:SetPoint("TOPLEFT", LIST_PAD - 2, -(HEADER_H + 1))
     keyList.tabs[2]:SetPoint("LEFT", keyList.tabs[1], "RIGHT", 2, 0)
+    keyList.tabs[3]:SetPoint("LEFT", keyList.tabs[2], "RIGHT", 2, 0)
 
     keyList.colPlayer = Label(keyList, 9, 0.45, 0.5, 0.56)
     keyList.colPlayer:SetPoint("TOPLEFT", LIST_PAD + 3, -(HEADER_H + TAB_H + 2))
@@ -1400,15 +1464,17 @@ local function BuildKeyList()
 end
 
 function KeyPort.SetTab(tab)
-    if tab ~= "PARTY" and tab ~= "GUILD" then return end
+    if tab ~= "PARTY" and tab ~= "GUILD" and tab ~= "ALTS" then return end
     if activeTab == tab then return end
     activeTab = tab
     scrollOffset = 0
     if tab == "GUILD" then
         if C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
         RefreshGuildRoster()
+    elseif tab == "ALTS" then
+        KeyPort.RecordOwnKeystone()
     end
-    RequestKeystones(tab)
+    if tab ~= "ALTS" then RequestKeystones(tab) end
     KeyPort.RefreshKeyList()
 end
 
@@ -1425,6 +1491,24 @@ local function CollectRows()
                 mapID = key and key.mapID,
                 level = key and key.level or 0,
                 rating = key and key.rating or 0,
+            }
+        end
+    elseif activeTab == "ALTS" then
+        local fresh = WeekStart()
+        local me = ShortUnitName("player")
+        for fullName, alt in pairs(db.alts or {}) do
+            local stale = (alt.updated or 0) < fresh
+            rows[#rows + 1] = {
+                name = alt.name or fullName,
+                fullName = fullName,
+                unit = (alt.name == me) and "player" or nil,
+                classFile = alt.classFile,
+                mapID = (not stale) and alt.mapID or nil,
+                level = (not stale) and (alt.level or 0) or 0,
+                rating = alt.rating or 0,
+                stale = stale and (alt.level or 0) > 0,
+                realm = alt.realm,
+                updated = alt.updated,
             }
         end
     else
@@ -1458,7 +1542,9 @@ function KeyPort.RefreshKeyList()
     keyList.rowCount = #rows
 
     -- Drop a selection whose key changed or whose owner is gone.
-    if selection and not vote.active then
+    if selection and selection.tab == "ALTS" then
+        -- Alt rows are not in the party or guild stores; leave them alone.
+    elseif selection and not vote.active then
         local key = Store(selection.tab or "PARTY")[selection.name]
         if not key or key.mapID ~= selection.mapID or key.level ~= selection.level then
             selection = nil
@@ -1479,6 +1565,7 @@ function KeyPort.RefreshKeyList()
             shown_count = shown_count + 1
             row.owner, row.mapID, row.keyLevel = data.name, data.mapID, data.level
             row.rating = data.rating
+            row.realm, row.fullName = data.realm, data.fullName
             row.player:SetText(data.name or "?")
             row.player:SetTextColor(ClassRGBFor(data.unit, data.classFile))
             ApplyAvatar(row.avatar, data.unit, data.classFile)
@@ -1519,7 +1606,11 @@ function KeyPort.RefreshKeyList()
                 row.dungeonEdge:Hide()
             end
 
-            if not data.mapID or data.level <= 0 then
+            if data.stale then
+                row.selectable = false
+                row.dungeon:SetText("last week's key")
+                row.dungeon:SetTextColor(0.45, 0.47, 0.5)
+            elseif not data.mapID or data.level <= 0 then
                 row.selectable = false
                 row.dungeon:SetText("no keystone")
                 row.dungeon:SetTextColor(0.45, 0.47, 0.5)
@@ -1565,9 +1656,13 @@ function KeyPort.RefreshKeyList()
         keyList.empty:ClearAllPoints()
         keyList.empty:SetPoint("TOPLEFT", LIST_PAD, -(listTop + 8))
         keyList.empty:SetPoint("TOPRIGHT", -LIST_PAD, -(listTop + 8))
-        keyList.empty:SetText(activeTab == "GUILD"
-            and "No guild keystones yet.\nGuildmates need KeyPort, DBM, BigWigs or\nanother addon that shares keys."
-            or "Waiting for keystones.")
+        local blank = "Waiting for keystones."
+        if activeTab == "GUILD" then
+            blank = "No guild keystones yet.\nGuildmates need KeyPort, DBM, BigWigs or\nanother addon that shares keys."
+        elseif activeTab == "ALTS" then
+            blank = "No characters recorded yet.\nLog in on an alt with KeyPort installed and it\nwill appear here."
+        end
+        keyList.empty:SetText(blank)
         keyList.empty:Show()
     else
         keyList.empty:Hide()
@@ -1684,8 +1779,11 @@ function KeyPort.OpenKeyList(tab)
     if activeTab == "GUILD" then
         if C_GuildInfo and C_GuildInfo.GuildRoster then pcall(C_GuildInfo.GuildRoster) end
         RefreshGuildRoster()
+    elseif activeTab == "ALTS" then
+        KeyPort.RecordOwnKeystone()
     end
-    RequestKeystones(activeTab)
+    -- LibKeystone only knows PARTY and GUILD; the alts list is local data.
+    if activeTab ~= "ALTS" then RequestKeystones(activeTab) end
     LayoutList()
     KeyPort.RefreshKeyList()
     keyList:Show()
@@ -2048,6 +2146,8 @@ local function Usage()
     print("  " .. ACCENT .. "/kp vote all|r  skip the picking and put every key up")
     print("     (" .. ACCENT .. "/kp vote 45|r sets how long a vote runs)")
     print("  " .. ACCENT .. "/kp guild|r  open the list on the guild tab")
+    print("  " .. ACCENT .. "/kp alts|r  your other characters' keystones (" ..
+          ACCENT .. "/kp alts clear|r forgets them)")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
     print("  " .. ACCENT .. "/kp scale 1.2|r  resize the popup")
@@ -2174,6 +2274,15 @@ local function HandleSlash(input)
         return
     elseif verb == "guild" then
         KeyPort.OpenKeyList("GUILD"); return
+    elseif verb == "alts" then
+        if rest:lower() == "clear" then
+            wipe(db.alts)
+            KeyPort.RecordOwnKeystone()
+            Print("forgot every character except this one.")
+            if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
+            return
+        end
+        KeyPort.OpenKeyList("ALTS"); return
     elseif verb == "keys" then
         local mode = rest:lower()
         if mode ~= "off" and mode ~= "auto" and mode ~= "force" then
@@ -2421,6 +2530,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         end
         BuildCatalog()
         RefreshSeasonBests()
+        KeyPort.RecordOwnKeystone()
         BuildPanel()   -- login is always out of combat: safe to build the secure button
         if LibKeystone then
             -- Party keys only; the library also reports guild keys, which are
@@ -2466,6 +2576,10 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         return
 
     elseif event == "CHALLENGE_MODE_COMPLETED" then
+        -- The new key lands a moment after the run ends.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(3, KeyPort.RecordOwnKeystone)
+        end
         -- Everyone is about to be handed a new keystone; drop the stale ones.
         -- The run just finished may also have raised our own season best.
         RefreshSeasonBests()
