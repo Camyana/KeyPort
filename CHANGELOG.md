@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0
+
+- **A Recent tab.** Players you group with are remembered along with the key
+  they were carrying, their rating and their class, newest first. `/kp recent`
+  opens it.
+- **Records past the weekly reset are greyed out**, portrait and all, and their
+  key reads *last week's key* rather than pretending to still exist. The
+  tooltip says when the player was last seen.
+- A recent player's key can be selected and sent like any other, and
+  right-click forgets a player. `/kp recent clear` empties the list.
+- The list keeps the fifty most recent players, so it cannot grow forever.
+
 ## 1.5.0
 
 - **An Alts tab.** Every character on the account that has logged in with

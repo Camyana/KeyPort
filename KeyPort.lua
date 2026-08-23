@@ -163,6 +163,7 @@ local function InitDB()
     db.scale  = tonumber(db.scale) or 1
     db.custom = db.custom or {}   -- [challengeMapID] = spellID, user supplied
     db.alts   = db.alts   or {}   -- ["Name-Realm"] = this character's keystone
+    db.recent = db.recent or {}   -- ["Name-Realm"] = someone we grouped with
     return db
 end
 
@@ -878,6 +879,16 @@ local function Store(tab)
     return tab == "GUILD" and guildKeys or keystones
 end
 
+-- The unit token behind a party member's name, for portraits and colours.
+local function UnitForName(name)
+    if not name then return nil end
+    for i = 0, PARTY_SIZE - 1 do
+        local unit = (i == 0) and "player" or ("party" .. i)
+        if UnitExists(unit) and ShortUnitName(unit) == name then return unit end
+    end
+    return nil
+end
+
 -- Keystones reset weekly, so anything recorded before this week's reset is
 -- last week's key and no longer real.
 local function WeekStart()
@@ -893,6 +904,52 @@ end
 local function FullName(name, realm)
     realm = (realm and realm ~= "" and realm) or (GetRealmName and GetRealmName()) or "?"
     return name .. "-" .. (realm:gsub("%s+", ""))
+end
+
+local RECENT_LIMIT = 50   -- keep the list from growing forever
+
+-- Rough, friendly age of a record.
+local function TimeAgo(stamp)
+    if not stamp or stamp <= 0 then return "unknown" end
+    local seconds = ((time and time()) or 0) - stamp
+    if seconds < 120 then return "just now" end
+    if seconds < 5400 then return math.floor(seconds / 60) .. " min ago" end
+    if seconds < 172800 then return math.floor(seconds / 3600) .. " hours ago" end
+    return math.floor(seconds / 86400) .. " days ago"
+end
+
+-- Drop the oldest entries once the list gets long.
+local function PruneRecent()
+    local order = {}
+    for full, rec in pairs(db.recent) do order[#order + 1] = { full = full, at = rec.seen or 0 } end
+    if #order <= RECENT_LIMIT then return end
+    table.sort(order, function(a, b) return a.at > b.at end)
+    for i = RECENT_LIMIT + 1, #order do db.recent[order[i].full] = nil end
+end
+
+--- Remember someone we grouped with, and whatever key they were carrying.
+local function RecordRecent(fullName, short, level, mapID, rating)
+    if not db or not db.recent or not fullName or not short then return end
+    if short == UnitName("player") then return end   -- that is what the Alts tab is for
+
+    local previous = db.recent[fullName] or {}
+    local classFile = previous.classFile
+    local unit = UnitForName(short)
+    if unit then
+        local _, class = UnitClass(unit)
+        classFile = class or classFile
+    end
+
+    db.recent[fullName] = {
+        name = short,
+        realm = fullName:match("%-(.+)$") or previous.realm,
+        classFile = classFile,
+        mapID = (mapID or 0) > 0 and mapID or nil,
+        level = level or 0,
+        rating = rating or previous.rating or 0,
+        seen = (time and time()) or 0,
+    }
+    PruneRecent()
 end
 
 --- Record this character's keystone in the account-wide list.
@@ -949,16 +1006,6 @@ local function RefreshGuildRoster()
             if short then guildClass[short] = classFile end
         end
     end
-end
-
--- The unit token behind a party member's name, for portraits and colours.
-local function UnitForName(name)
-    if not name then return nil end
-    for i = 0, PARTY_SIZE - 1 do
-        local unit = (i == 0) and "player" or ("party" .. i)
-        if UnitExists(unit) and ShortUnitName(unit) == name then return unit end
-    end
-    return nil
 end
 
 local function ClassRGBFor(unit, classFile)
@@ -1033,8 +1080,12 @@ end
 
 -- LibKeystone hands us one player's key. A level or map of 0 means "no key".
 local function StoreKeystone(level, mapID, rating, name, channel)
+    local fullName = CleanName(name)
     name = CleanName(name and ShortName(name))
     if not name then return end
+    if channel == "PARTY" and fullName then
+        RecordRecent(fullName, name, level, mapID, rating)
+    end
     local store = Store(channel == "GUILD" and "GUILD" or "PARTY")
     if type(level) ~= "number" or type(mapID) ~= "number" or level <= 0 or mapID <= 0 then
         -- Keep the rating even when there is no key: it is still worth showing.
@@ -1228,6 +1279,9 @@ local function BuildRow(parent, index)
         if (self.rating or 0) > 0 then
             GameTooltip:AddLine("Mythic+ rating: " .. self.rating, 0.7, 0.7, 0.7)
         end
+        if self.seen then
+            GameTooltip:AddLine("Last seen " .. TimeAgo(self.seen), 0.5, 0.52, 0.56)
+        end
         if self.realm then
             GameTooltip:AddLine(self.realm, 0.5, 0.52, 0.56)
             GameTooltip:AddLine("Right-click to forget this character.", 0.6, 0.63, 0.68, true)
@@ -1243,8 +1297,10 @@ local function BuildRow(parent, index)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", function(self, button)
         if button == "RightButton" then
-            if activeTab == "ALTS" and self.fullName and db.alts[self.fullName] then
-                db.alts[self.fullName] = nil
+            local store = (activeTab == "ALTS" and db.alts)
+                          or (activeTab == "RECENT" and db.recent)
+            if store and self.fullName and store[self.fullName] then
+                store[self.fullName] = nil
                 if selection and selection.name == self.owner then selection = nil end
                 Print("forgot " .. self.owner .. ".")
                 KeyPort.RefreshKeyList()
@@ -1372,10 +1428,12 @@ local function BuildKeyList()
         TabButton(keyList, "Party", "PARTY"),
         TabButton(keyList, "Guild", "GUILD"),
         TabButton(keyList, "Alts", "ALTS"),
+        TabButton(keyList, "Recent", "RECENT"),
     }
     keyList.tabs[1]:SetPoint("TOPLEFT", LIST_PAD - 2, -(HEADER_H + 1))
     keyList.tabs[2]:SetPoint("LEFT", keyList.tabs[1], "RIGHT", 2, 0)
     keyList.tabs[3]:SetPoint("LEFT", keyList.tabs[2], "RIGHT", 2, 0)
+    keyList.tabs[4]:SetPoint("LEFT", keyList.tabs[3], "RIGHT", 2, 0)
 
     keyList.colPlayer = Label(keyList, 9, 0.45, 0.5, 0.56)
     keyList.colPlayer:SetPoint("TOPLEFT", LIST_PAD + 3, -(HEADER_H + TAB_H + 2))
@@ -1464,7 +1522,7 @@ local function BuildKeyList()
 end
 
 function KeyPort.SetTab(tab)
-    if tab ~= "PARTY" and tab ~= "GUILD" and tab ~= "ALTS" then return end
+    if tab ~= "PARTY" and tab ~= "GUILD" and tab ~= "ALTS" and tab ~= "RECENT" then return end
     if activeTab == tab then return end
     activeTab = tab
     scrollOffset = 0
@@ -1474,7 +1532,7 @@ function KeyPort.SetTab(tab)
     elseif tab == "ALTS" then
         KeyPort.RecordOwnKeystone()
     end
-    if tab ~= "ALTS" then RequestKeystones(tab) end
+    if tab == "PARTY" or tab == "GUILD" then RequestKeystones(tab) end
     KeyPort.RefreshKeyList()
 end
 
@@ -1493,6 +1551,27 @@ local function CollectRows()
                 rating = key and key.rating or 0,
             }
         end
+    elseif activeTab == "RECENT" then
+        local fresh = WeekStart()
+        for fullName, rec in pairs(db.recent or {}) do
+            local stale = (rec.seen or 0) < fresh
+            rows[#rows + 1] = {
+                name = rec.name or fullName,
+                fullName = fullName,
+                unit = UnitForName(rec.name),
+                classFile = rec.classFile,
+                mapID = (not stale) and rec.mapID or nil,
+                level = (not stale) and (rec.level or 0) or 0,
+                rating = rec.rating or 0,
+                stale = stale and (rec.level or 0) > 0,
+                dim = stale,
+                realm = rec.realm,
+                seen = rec.seen,
+            }
+        end
+        -- Most recently seen first: that is what makes it the recent list.
+        table.sort(rows, function(a, b) return (a.seen or 0) > (b.seen or 0) end)
+        return rows
     elseif activeTab == "ALTS" then
         local fresh = WeekStart()
         local me = ShortUnitName("player")
@@ -1566,9 +1645,17 @@ function KeyPort.RefreshKeyList()
             row.owner, row.mapID, row.keyLevel = data.name, data.mapID, data.level
             row.rating = data.rating
             row.realm, row.fullName = data.realm, data.fullName
+            row.seen = data.seen
             row.player:SetText(data.name or "?")
-            row.player:SetTextColor(ClassRGBFor(data.unit, data.classFile))
+            local pr, pg, pb = ClassRGBFor(data.unit, data.classFile)
+            if data.dim then
+                -- Cached from before the weekly reset: shown, but visibly past it.
+                pr, pg, pb = pr * 0.5, pg * 0.5, pb * 0.5
+            end
+            row.player:SetTextColor(pr, pg, pb)
             ApplyAvatar(row.avatar, data.unit, data.classFile)
+            row.avatar:SetDesaturated(data.dim and true or false)
+            row.avatar:SetAlpha(data.dim and 0.5 or 1)
 
             row.candidate = data.candidate
             if data.candidate then
@@ -1661,6 +1748,8 @@ function KeyPort.RefreshKeyList()
             blank = "No guild keystones yet.\nGuildmates need KeyPort, DBM, BigWigs or\nanother addon that shares keys."
         elseif activeTab == "ALTS" then
             blank = "No characters recorded yet.\nLog in on an alt with KeyPort installed and it\nwill appear here."
+        elseif activeTab == "RECENT" then
+            blank = "Nobody recorded yet.\nPlayers you group with are remembered here,\nalong with the key they were carrying."
         end
         keyList.empty:SetText(blank)
         keyList.empty:Show()
@@ -1783,7 +1872,7 @@ function KeyPort.OpenKeyList(tab)
         KeyPort.RecordOwnKeystone()
     end
     -- LibKeystone only knows PARTY and GUILD; the alts list is local data.
-    if activeTab ~= "ALTS" then RequestKeystones(activeTab) end
+    if activeTab == "PARTY" or activeTab == "GUILD" then RequestKeystones(activeTab) end
     LayoutList()
     KeyPort.RefreshKeyList()
     keyList:Show()
@@ -2148,6 +2237,8 @@ local function Usage()
     print("  " .. ACCENT .. "/kp guild|r  open the list on the guild tab")
     print("  " .. ACCENT .. "/kp alts|r  your other characters' keystones (" ..
           ACCENT .. "/kp alts clear|r forgets them)")
+    print("  " .. ACCENT .. "/kp recent|r  players you have grouped with (" ..
+          ACCENT .. "/kp recent clear|r forgets them)")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
     print("  " .. ACCENT .. "/kp scale 1.2|r  resize the popup")
@@ -2274,6 +2365,14 @@ local function HandleSlash(input)
         return
     elseif verb == "guild" then
         KeyPort.OpenKeyList("GUILD"); return
+    elseif verb == "recent" then
+        if rest:lower() == "clear" then
+            wipe(db.recent)
+            Print("forgot everyone on the recent list.")
+            if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
+            return
+        end
+        KeyPort.OpenKeyList("RECENT"); return
     elseif verb == "alts" then
         if rest:lower() == "clear" then
             wipe(db.alts)
