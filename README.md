@@ -28,8 +28,11 @@ Size and position are saved.
 
 ## Putting it to a vote
 
-Rather than one person choosing, hit **Vote** (or `/kp vote`) and the list
-becomes a ballot: every party member running KeyPort sees the keys with a live
+Hit **Vote** (or `/kp vote`) and you build the ballot first: every key starts
+ticked, click rows to take keys off or put them back, then **Start** sends it.
+Nothing reaches the party until you do. `/kp vote all` skips that step.
+
+From there every party member running KeyPort sees the ballot with a live
 tally, clicks one and casts. Votes can be changed until the clock runs out, and
 the winner is then sent to the party as if it had been picked by hand.
 
@@ -66,7 +69,8 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp list` / `/kp list all` | This season's codes / every dungeon KeyPort knows |
 | `/kp share` | Toggle whether you receive reminders from your group |
 | `/kp announce` | Toggle the party chat line sent when a key goes out |
-| `/kp vote` | Put the party's keystones to a vote (`/kp vote 45` sets the length) |
+| `/kp vote` | Choose keys for a ballot, then Start (`/kp vote 45` sets the length) |
+| `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.1
+
+- **You now choose which keys go on the ballot.** Vote no longer puts every key
+  up immediately: it starts a ballot with all of them ticked, you click rows to
+  take keys off or put them back, and Start sends it. Cancel throws it away.
+  Nothing reaches the party until you press Start.
+- `/kp vote all` keeps the old behaviour of putting every key up in one step.
+
 ## 1.4.0
 
 - **Put the key to a vote.** The Vote button, or `/kp vote`, turns the party's

@@ -862,6 +862,10 @@ local scrollOffset = 0
 -- Voting state lives here because the list reads it; the logic that drives it
 -- is in the VOTING section, further down.
 local vote = { active = false }
+-- Composing is the step before a vote: the ballot is being put together
+-- locally and nothing has been sent yet.
+local composing = false
+local ballotPick = {}          -- [owner name] = true, the keys going on it
 local VoteRows, VoteStatusText, ClearVote
 local visibleRows = PARTY_SIZE
 
@@ -1186,6 +1190,11 @@ local function BuildRow(parent, index)
 
     row:SetScript("OnClick", function(self)
         if not self.selectable then return end
+        if composing then
+            ballotPick[self.owner] = (not ballotPick[self.owner]) or nil
+            KeyPort.RefreshKeyList()
+            return
+        end
         selection = { name = self.owner, mapID = self.mapID, level = self.keyLevel,
                       tab = activeTab, candidate = self.candidate }
         KeyPort.RefreshKeyList()
@@ -1325,11 +1334,19 @@ local function BuildKeyList()
     keyList.choice:SetWordWrap(false)
 
     keyList.send = ListButton(keyList, 140, 22, "Send to Party")
-    keyList.send:SetScript("OnClick", function() KeyPort.SendSelection() end)
+    keyList.send:SetScript("OnClick", function()
+        if composing then KeyPort.CancelBallot() else KeyPort.SendSelection() end
+    end)
 
     keyList.vote = ListButton(keyList, 72, 22, "Vote")
     keyList.vote:SetScript("OnClick", function()
-        if vote.active then KeyPort.CastVote() else KeyPort.StartVote() end
+        if vote.active then
+            KeyPort.CastVote()
+        elseif composing then
+            KeyPort.StartVote()
+        else
+            KeyPort.BeginBallot()
+        end
     end)
 
     keyList.refresh = ListButton(keyList, 74, 22, "Refresh")
@@ -1527,8 +1544,13 @@ function KeyPort.RefreshKeyList()
             end
             row.dungeonName = dungeon
 
-            local chosen = selection and selection.name == data.name
-                           and selection.tab == activeTab
+            local chosen
+            if composing then
+                chosen = row.selectable and ballotPick[data.name] or false
+            else
+                chosen = selection and selection.name == data.name
+                         and selection.tab == activeTab
+            end
             for _, tex in ipairs(row.mark) do tex:SetShown(chosen and true or false) end
             row.bg:SetColorTexture(1, 1, 1, chosen and 0.10 or 0.04)
             row:Show()
@@ -1561,7 +1583,12 @@ function KeyPort.RefreshKeyList()
     keyList.choice:SetPoint("TOPLEFT", LIST_PAD, -base)
     keyList.choice:SetPoint("TOPRIGHT", -LIST_PAD, -base)
     local status = VoteStatusText()
-    if status then
+    if composing then
+        local n = 0
+        for _ in pairs(ballotPick) do n = n + 1 end
+        keyList.choice:SetText(ACCENT .. "Building a ballot|r   " .. n ..
+                               " keys picked, click rows to add or remove")
+    elseif status then
         keyList.choice:SetText(ACCENT .. status .. "|r")
     elseif selection then
         local dungeon = DungeonName(selection.mapID) or "?"
@@ -1584,7 +1611,14 @@ function KeyPort.RefreshKeyList()
     keyList.refresh:SetPoint("BOTTOMRIGHT", -LIST_PAD - 14, LIST_PAD)
     keyList.refresh:SetWidth(refreshW)
 
-    if vote.active then
+    if composing then
+        local n = 0
+        for _ in pairs(ballotPick) do n = n + 1 end
+        keyList.send:SetActive(true)
+        keyList.send.label:SetText("Cancel")
+        keyList.vote.label:SetText("Start " .. n)
+        keyList.vote:SetActive(n >= 2)
+    elseif vote.active then
         keyList.send:SetActive(false)
         keyList.send.label:SetText("Voting...")
         keyList.vote.label:SetText("Cast")
@@ -1701,6 +1735,8 @@ local function StopVoteTicker()
 end
 
 ClearVote = function()
+    composing = false
+    wipe(ballotPick)
     StopVoteTicker()
     vote.active, vote.id, vote.starter = false, nil, nil
     vote.candidates, vote.ballots, vote.mine = nil, nil, nil
@@ -1836,14 +1872,56 @@ local function BeginVote(id, starter, seconds, candidates)
     end
 end
 
---- Put the party's keys to a vote.
-function KeyPort.StartVote()
+--- Start choosing which keys go on the ballot. Nothing is sent yet.
+function KeyPort.BeginBallot()
+    local blocked = BlockedReason()
+    if blocked then Print(blocked); return end
+    if vote.active then Print("a vote is already running."); return end
+    if not GroupChannel() then Print("you are not in a party."); return end
+
+    local pool = CandidatesFromParty()
+    if #pool < 2 then
+        Print("a vote needs at least two keystones to choose between.")
+        return
+    end
+
+    -- Everything starts ticked: taking a key off is the rarer intent.
+    wipe(ballotPick)
+    for _, candidate in ipairs(pool) do ballotPick[candidate.owner] = true end
+    composing = true
+    selection = nil
+    KeyPort.OpenKeyList("PARTY")
+    KeyPort.RefreshKeyList()
+    Print("pick the keys for the ballot, then press Start.")
+end
+
+--- Drop the half-built ballot.
+function KeyPort.CancelBallot()
+    if not composing then return end
+    composing = false
+    wipe(ballotPick)
+    KeyPort.RefreshKeyList()
+end
+
+--- Send the ballot to the party. Uses the picked keys when one was composed,
+--- and every key in the party otherwise.
+function KeyPort.StartVote(useEveryKey)
     local blocked = BlockedReason()
     if blocked then Print(blocked); return end
     if vote.active then Print("a vote is already running."); return end
     if not GroupChannel() then Print("you are not in a party."); return end
 
     local candidates = CandidatesFromParty()
+    if composing and not useEveryKey then
+        local picked = {}
+        for _, candidate in ipairs(candidates) do
+            if ballotPick[candidate.owner] then picked[#picked + 1] = candidate end
+        end
+        candidates = picked
+    end
+    composing = false
+    wipe(ballotPick)
+
     if #candidates < 2 then
         Print("a vote needs at least two keystones to choose between.")
         return
@@ -1966,8 +2044,9 @@ local function Usage()
     print("  " .. ACCENT .. "/kp hide|r  close it for the whole group")
     print("  " .. ACCENT .. "/kp list|r  dungeon codes")
     print("  " .. ACCENT .. "/kp share|r  toggle receiving your group's reminders")
-    print("  " .. ACCENT .. "/kp vote|r  put the party's keys to a vote (" ..
-          ACCENT .. "/kp vote 45|r sets the length)")
+    print("  " .. ACCENT .. "/kp vote|r  pick keys for a ballot, then Start")
+    print("  " .. ACCENT .. "/kp vote all|r  skip the picking and put every key up")
+    print("     (" .. ACCENT .. "/kp vote 45|r sets how long a vote runs)")
     print("  " .. ACCENT .. "/kp guild|r  open the list on the guild tab")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
@@ -2087,7 +2166,12 @@ local function HandleSlash(input)
             Print("votes now run for " .. db.voteSeconds .. " seconds.")
             return
         end
-        KeyPort.StartVote(); return
+        if rest:lower() == "all" then
+            KeyPort.StartVote(true)     -- skip the picking, put every key up
+        else
+            KeyPort.BeginBallot()
+        end
+        return
     elseif verb == "guild" then
         KeyPort.OpenKeyList("GUILD"); return
     elseif verb == "keys" then
