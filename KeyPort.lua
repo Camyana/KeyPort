@@ -754,6 +754,8 @@ end
 -- A name arriving over the wire is display-only, but it still lands in a
 -- FontString, so strip anything that could turn into markup (|c colour codes,
 -- |H hyperlinks, |T textures) and cap the length.
+local HandleVoteMessage   -- defined with the voting section, below
+
 local function CleanName(raw)
     if type(raw) ~= "string" then return nil end
     local name = raw
@@ -790,6 +792,8 @@ local function HandleMessage(payload, sender)
     local fingerprint = sender .. "\0" .. payload
     if recentMessages[fingerprint] and (now - recentMessages[fingerprint]) < 2 then return end
     recentMessages[fingerprint] = now
+
+    if HandleVoteMessage(payload, sender) then return end
 
     if payload == PROTO_HIDE then
         KeyPort.Hide()
@@ -854,6 +858,11 @@ local keyList                   -- the picker frame
 local selection                 -- { name, mapID, level, tab }
 local activeTab = "PARTY"
 local scrollOffset = 0
+
+-- Voting state lives here because the list reads it; the logic that drives it
+-- is in the VOTING section, further down.
+local vote = { active = false }
+local VoteRows, VoteStatusText, ClearVote
 local visibleRows = PARTY_SIZE
 
 local function ShortUnitName(unit)
@@ -888,6 +897,16 @@ local function RefreshGuildRoster()
             if short then guildClass[short] = classFile end
         end
     end
+end
+
+-- The unit token behind a party member's name, for portraits and colours.
+local function UnitForName(name)
+    if not name then return nil end
+    for i = 0, PARTY_SIZE - 1 do
+        local unit = (i == 0) and "player" or ("party" .. i)
+        if UnitExists(unit) and ShortUnitName(unit) == name then return unit end
+    end
+    return nil
 end
 
 local function ClassRGBFor(unit, classFile)
@@ -1167,7 +1186,8 @@ local function BuildRow(parent, index)
 
     row:SetScript("OnClick", function(self)
         if not self.selectable then return end
-        selection = { name = self.owner, mapID = self.mapID, level = self.keyLevel, tab = activeTab }
+        selection = { name = self.owner, mapID = self.mapID, level = self.keyLevel,
+                      tab = activeTab, candidate = self.candidate }
         KeyPort.RefreshKeyList()
     end)
     row:Hide()
@@ -1307,7 +1327,12 @@ local function BuildKeyList()
     keyList.send = ListButton(keyList, 140, 22, "Send to Party")
     keyList.send:SetScript("OnClick", function() KeyPort.SendSelection() end)
 
-    keyList.refresh = ListButton(keyList, 78, 22, "Refresh")
+    keyList.vote = ListButton(keyList, 72, 22, "Vote")
+    keyList.vote:SetScript("OnClick", function()
+        if vote.active then KeyPort.CastVote() else KeyPort.StartVote() end
+    end)
+
+    keyList.refresh = ListButton(keyList, 74, 22, "Refresh")
     keyList.refresh:SetScript("OnClick", function()
         RequestKeystones(activeTab)
         if activeTab == "GUILD" then RefreshGuildRoster() end
@@ -1372,6 +1397,7 @@ end
 
 -- Build the sorted dataset for the active tab.
 local function CollectRows()
+    if vote.active and activeTab == "PARTY" then return VoteRows() end
     local rows = {}
     if activeTab == "PARTY" then
         for _, member in ipairs(Roster()) do
@@ -1415,7 +1441,7 @@ function KeyPort.RefreshKeyList()
     keyList.rowCount = #rows
 
     -- Drop a selection whose key changed or whose owner is gone.
-    if selection then
+    if selection and not vote.active then
         local key = Store(selection.tab or "PARTY")[selection.name]
         if not key or key.mapID ~= selection.mapID or key.level ~= selection.level then
             selection = nil
@@ -1440,7 +1466,16 @@ function KeyPort.RefreshKeyList()
             row.player:SetTextColor(ClassRGBFor(data.unit, data.classFile))
             ApplyAvatar(row.avatar, data.unit, data.classFile)
 
-            if (data.rating or 0) > 0 then
+            row.candidate = data.candidate
+            if data.candidate then
+                -- During a vote the score column carries the tally instead.
+                row.score:SetText(data.votes > 0 and tostring(data.votes) or "-")
+                if vote.mine == data.candidate then
+                    row.score:SetTextColor(0.25, 0.88, 0.44)
+                else
+                    row.score:SetTextColor(ACCENT_RGB[1], ACCENT_RGB[2], ACCENT_RGB[3])
+                end
+            elseif (data.rating or 0) > 0 then
                 row.score:SetText(data.rating)
                 row.score:SetTextColor(ScoreColour(data.rating))
             else
@@ -1525,7 +1560,10 @@ function KeyPort.RefreshKeyList()
     keyList.choice:ClearAllPoints()
     keyList.choice:SetPoint("TOPLEFT", LIST_PAD, -base)
     keyList.choice:SetPoint("TOPRIGHT", -LIST_PAD, -base)
-    if selection then
+    local status = VoteStatusText()
+    if status then
+        keyList.choice:SetText(ACCENT .. status .. "|r")
+    elseif selection then
         local dungeon = DungeonName(selection.mapID) or "?"
         keyList.choice:SetText(("%s %s  (%s%s|r)"):format(
             dungeon, LevelMarkup(selection.mapID, selection.level), ACCENT, selection.name))
@@ -1533,15 +1571,37 @@ function KeyPort.RefreshKeyList()
         keyList.choice:SetText(#rows > 0 and "Click a keystone to select it" or "")
     end
 
+    local inParty = GroupChannel() ~= nil
+    local voteW, refreshW = 72, 74
+    local sendW = math.max(84, keyList:GetWidth() - LIST_PAD * 2 - 14 - voteW - refreshW - 12)
     keyList.send:ClearAllPoints()
     keyList.send:SetPoint("BOTTOMLEFT", LIST_PAD, LIST_PAD)
+    keyList.send:SetWidth(sendW)
+    keyList.vote:ClearAllPoints()
+    keyList.vote:SetPoint("BOTTOMLEFT", LIST_PAD + sendW + 6, LIST_PAD)
+    keyList.vote:SetWidth(voteW)
     keyList.refresh:ClearAllPoints()
     keyList.refresh:SetPoint("BOTTOMRIGHT", -LIST_PAD - 14, LIST_PAD)
-    keyList.send:SetWidth(math.max(96, keyList:GetWidth() - LIST_PAD * 2 - 14 - 78 - 6))
+    keyList.refresh:SetWidth(refreshW)
 
-    local inParty = GroupChannel() ~= nil
-    keyList.send:SetActive(selection ~= nil and inParty)
-    keyList.send.label:SetText(inParty and "Send to Party" or "Not in a party")
+    if vote.active then
+        keyList.send:SetActive(false)
+        keyList.send.label:SetText("Voting...")
+        keyList.vote.label:SetText("Cast")
+        keyList.vote:SetActive(selection ~= nil and selection.candidate ~= nil)
+    else
+        keyList.send:SetActive(selection ~= nil and inParty)
+        keyList.send.label:SetText(inParty and "Send" or "No party")
+        keyList.vote.label:SetText("Vote")
+        keyList.vote:SetActive(inParty and activeTab == "PARTY")
+    end
+end
+
+-- Just the countdown, so the ticker does not repaint the whole list.
+function KeyPort.UpdateVoteStatus()
+    if not keyList then return end
+    local status = VoteStatusText()
+    if status then keyList.choice:SetText(ACCENT .. status .. "|r") end
 end
 
 -- Put the selected key on everyone's screen.
@@ -1598,6 +1658,301 @@ function KeyPort.OpenKeyList(tab)
 end
 
 -------------------------------------------------------------------------------
+--  VOTING
+--  "Whose key are we doing?" put to the party. The starter takes a snapshot of
+--  the keys on offer and sends it as the ballot, so every client votes on the
+--  same list even if their own keystone data differs slightly. Ballots are
+--  broadcast, so everyone tallies locally and sees the count move in real time;
+--  the starter declares the winner at the end, which keeps ties from being
+--  broken two different ways on two different screens.
+--
+--  Wire format (all validated on arrival, like every other KeyPort message):
+--    VS1:<id>:<seconds>:<spell>,<level>,<owner>;...   start, with the ballot
+--    VB1:<id>:<index>                                 one ballot
+--    VE1:<id>:<winning index>                         result, from the starter
+-------------------------------------------------------------------------------
+local VOTE_START, VOTE_BALLOT, VOTE_END = "VS1", "VB1", "VE1"
+local MAX_CANDIDATES = 8
+local DEFAULT_VOTE_SECONDS = 30
+
+vote = {
+    active = false,
+    id = nil,
+    starter = nil,
+    candidates = nil,   -- { { spellID, level, owner, mapID } }
+    ballots = nil,      -- [voter name] = candidate index
+    endsAt = 0,
+    mine = nil,         -- the index this player voted for
+}
+local voteTicker
+
+local function VoteSeconds()
+    local n = tonumber(db.voteSeconds) or DEFAULT_VOTE_SECONDS
+    if n < 10 then n = 10 elseif n > 120 then n = 120 end
+    return n
+end
+
+local function VoteRemaining()
+    return math.max(0, math.ceil(vote.endsAt - GetTime()))
+end
+
+local function StopVoteTicker()
+    if voteTicker then voteTicker:Cancel(); voteTicker = nil end
+end
+
+ClearVote = function()
+    StopVoteTicker()
+    vote.active, vote.id, vote.starter = false, nil, nil
+    vote.candidates, vote.ballots, vote.mine = nil, nil, nil
+    vote.endsAt = 0
+end
+
+local function Tally()
+    local counts, total = {}, 0
+    if not vote.candidates then return counts, total end
+    for i = 1, #vote.candidates do counts[i] = 0 end
+    for _, index in pairs(vote.ballots or {}) do
+        if counts[index] then counts[index] = counts[index] + 1; total = total + 1 end
+    end
+    return counts, total
+end
+
+-- Most votes wins; a tie goes to the higher key, then to the name, so the
+-- result never depends on table order.
+local function WinningIndex()
+    local counts = Tally()
+    local best
+    for i, candidate in ipairs(vote.candidates or {}) do
+        local c = counts[i] or 0
+        if not best then
+            best = i
+        else
+            local bc = counts[best] or 0
+            local other = vote.candidates[best]
+            if c > bc
+               or (c == bc and candidate.level > other.level)
+               or (c == bc and candidate.level == other.level and candidate.owner < other.owner) then
+                best = i
+            end
+        end
+    end
+    return best
+end
+
+-- Rows for the list while a vote is running: the ballot, not the roster.
+VoteRows = function()
+    local counts = Tally()
+    local rows = {}
+    for i, candidate in ipairs(vote.candidates) do
+        rows[#rows + 1] = {
+            name = candidate.owner,
+            unit = UnitForName(candidate.owner),
+            mapID = candidate.mapID,
+            level = candidate.level,
+            votes = counts[i] or 0,
+            candidate = i,
+        }
+    end
+    return rows
+end
+
+local function CandidatesFromParty()
+    local list = {}
+    for _, member in ipairs(Roster()) do
+        local key = keystones[member.name]
+        if key and key.mapID and (key.level or 0) > 0 then
+            local entry = catalog.byMap[key.mapID]
+            if entry and entry.spellID then
+                list[#list + 1] = {
+                    spellID = entry.spellID,
+                    level = key.level,
+                    owner = member.name,
+                    mapID = key.mapID,
+                }
+            end
+        end
+        if #list >= MAX_CANDIDATES then break end
+    end
+    return list
+end
+
+local function EncodeCandidates(list)
+    local parts = {}
+    for _, c in ipairs(list) do
+        parts[#parts + 1] = c.spellID .. "," .. c.level .. "," .. c.owner
+    end
+    return table.concat(parts, ";")
+end
+
+-- Every field is checked against the local catalog, so a malformed or hostile
+-- ballot can only produce fewer candidates, never a bad teleport.
+local function DecodeCandidates(payload)
+    local list = {}
+    for record in tostring(payload):gmatch("[^;]+") do
+        local rawSpell, rawLevel, rawOwner = record:match("^(%d+),(%d+),(.+)$")
+        local spellID, level, owner = tonumber(rawSpell), tonumber(rawLevel), CleanName(rawOwner)
+        local entry = spellID and catalog.bySpell[spellID]
+        if entry and owner and level and level > 0 and level <= 100 then
+            list[#list + 1] = {
+                spellID = spellID, level = level, owner = owner, mapID = entry.mapID,
+            }
+        end
+        if #list >= MAX_CANDIDATES then break end
+    end
+    return list
+end
+
+VoteStatusText = function()
+    if not vote.active then return nil end
+    local _, total = Tally()
+    local voters = math.max(1, GetNumGroupMembers and GetNumGroupMembers() or 1)
+    return ("Vote: %ds left   %d/%d cast"):format(VoteRemaining(), total, voters)
+end
+
+local function StartVoteTicker()
+    StopVoteTicker()
+    if not (C_Timer and C_Timer.NewTicker) then return end
+    voteTicker = C_Timer.NewTicker(1, function()
+        if not vote.active then StopVoteTicker(); return end
+        if keyList and keyList:IsShown() then KeyPort.UpdateVoteStatus() end
+        if VoteRemaining() <= 0 then
+            StopVoteTicker()
+            -- Only the starter declares, so everyone gets the same answer.
+            if vote.starter == ShortUnitName("player") then KeyPort.FinishVote() end
+        end
+    end)
+end
+
+local function BeginVote(id, starter, seconds, candidates)
+    ClearVote()
+    vote.active = true
+    vote.id, vote.starter = id, starter
+    vote.candidates, vote.ballots = candidates, {}
+    vote.endsAt = GetTime() + seconds
+    StartVoteTicker()
+    if keyList then
+        activeTab = "PARTY"
+        KeyPort.RefreshKeyList()
+    end
+end
+
+--- Put the party's keys to a vote.
+function KeyPort.StartVote()
+    local blocked = BlockedReason()
+    if blocked then Print(blocked); return end
+    if vote.active then Print("a vote is already running."); return end
+    if not GroupChannel() then Print("you are not in a party."); return end
+
+    local candidates = CandidatesFromParty()
+    if #candidates < 2 then
+        Print("a vote needs at least two keystones to choose between.")
+        return
+    end
+
+    local me = ShortUnitName("player")
+    local id = me .. "-" .. math.floor(GetTime() * 10) % 100000
+    local seconds = VoteSeconds()
+    Broadcast(VOTE_START .. ":" .. id .. ":" .. seconds .. ":" .. EncodeCandidates(candidates))
+    BeginVote(id, me, seconds, candidates)
+    Print("vote started: " .. #candidates .. " keys, " .. seconds .. " seconds.")
+    AnnounceToParty("vote: which key?", nil, nil)
+    KeyPort.OpenKeyList("PARTY")
+end
+
+--- Cast, or change, this player's ballot.
+function KeyPort.CastVote(index)
+    if not vote.active then return end
+    index = index or (selection and selection.candidate)
+    if not index or not vote.candidates[index] then
+        Print("pick a keystone in the list first.")
+        return
+    end
+    local me = ShortUnitName("player")
+    if vote.ballots[me] == index then return end
+    vote.ballots[me] = index
+    vote.mine = index
+    Broadcast(VOTE_BALLOT .. ":" .. vote.id .. ":" .. index)
+    KeyPort.RefreshKeyList()
+end
+
+--- Close the vote and act on the winner. Called on the starter's client.
+function KeyPort.FinishVote()
+    if not vote.active then return end
+    local index = WinningIndex()
+    local winner = index and vote.candidates[index]
+    Broadcast(VOTE_END .. ":" .. vote.id .. ":" .. (index or 0))
+    KeyPort.ApplyVoteResult(index)
+    if winner then
+        -- Reuse the ordinary send path so the result behaves like any other
+        -- shared key, including the chat line and the popup.
+        selection = { name = winner.owner, mapID = winner.mapID,
+                      level = winner.level, tab = "PARTY" }
+        KeyPort.SendSelection()
+    end
+end
+
+--- Show the outcome locally. Everyone runs this; only the starter sends it.
+function KeyPort.ApplyVoteResult(index)
+    local winner = index and vote.candidates and vote.candidates[index]
+    local counts = Tally()
+    if winner then
+        local entry = catalog.byMap[winner.mapID]
+        Print(("vote: %s +%d (%s's key) wins with %d %s."):format(
+            (entry and entry.name) or "the key", winner.level, winner.owner,
+            counts[index] or 0, (counts[index] == 1) and "vote" or "votes"))
+    else
+        Print("vote ended with nothing chosen.")
+    end
+    ClearVote()
+    if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
+end
+
+-- Incoming vote traffic. Returns true when the payload was a vote message.
+HandleVoteMessage = function(payload, sender)
+    local kind = payload:match("^(V[SBE]1):")
+    if not kind then return false end
+    if BlockedReason() then return true end
+
+    local short = ShortName(sender)
+
+    if kind == VOTE_START then
+        local id, seconds, list = payload:match("^VS1:([^:]+):(%d+):(.+)$")
+        if not id or #id > 32 then return true end
+        if not db.acceptShares then return true end
+        local candidates = DecodeCandidates(list)
+        if #candidates < 2 then return true end
+        seconds = math.min(120, math.max(10, tonumber(seconds) or DEFAULT_VOTE_SECONDS))
+        BeginVote(id, short, seconds, candidates)
+        Print(short .. " started a vote on which key to run.")
+        KeyPort.OpenKeyList("PARTY")
+        return true
+    end
+
+    if not vote.active then return true end
+
+    if kind == VOTE_BALLOT then
+        local id, index = payload:match("^VB1:([^:]+):(%d+)$")
+        index = tonumber(index)
+        if id == vote.id and index and vote.candidates[index] then
+            vote.ballots[short] = index
+            if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
+        end
+        return true
+    end
+
+    if kind == VOTE_END then
+        local id, index = payload:match("^VE1:([^:]+):(%d+)$")
+        index = tonumber(index)
+        -- Only the player who started it gets to call the result.
+        if id == vote.id and short == vote.starter then
+            KeyPort.ApplyVoteResult(index and index > 0 and index or nil)
+        end
+        return true
+    end
+    return true
+end
+
+-------------------------------------------------------------------------------
 --  SLASH
 -------------------------------------------------------------------------------
 local function Usage()
@@ -1611,6 +1966,8 @@ local function Usage()
     print("  " .. ACCENT .. "/kp hide|r  close it for the whole group")
     print("  " .. ACCENT .. "/kp list|r  dungeon codes")
     print("  " .. ACCENT .. "/kp share|r  toggle receiving your group's reminders")
+    print("  " .. ACCENT .. "/kp vote|r  put the party's keys to a vote (" ..
+          ACCENT .. "/kp vote 45|r sets the length)")
     print("  " .. ACCENT .. "/kp guild|r  open the list on the guild tab")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
@@ -1723,6 +2080,14 @@ local function HandleSlash(input)
         KeyPort.Hide()
         if Broadcast(PROTO_HIDE) then Print("closed for the group.") end
         return
+    elseif verb == "vote" then
+        local seconds = tonumber(rest)
+        if seconds then
+            db.voteSeconds = math.min(120, math.max(10, seconds))
+            Print("votes now run for " .. db.voteSeconds .. " seconds.")
+            return
+        end
+        KeyPort.StartVote(); return
     elseif verb == "guild" then
         KeyPort.OpenKeyList("GUILD"); return
     elseif verb == "keys" then
@@ -2009,6 +2374,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         return
 
     elseif event == "CHALLENGE_MODE_START" then
+        if vote.active then ClearVote() end
         -- The run is under way; there is nothing left to coordinate.
         queued.keyList = false
         if keyList then keyList:Hide() end
@@ -2068,6 +2434,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         if not IsInGroup() then
             wipe(recentMessages)
             wipe(keystones)      -- guild keys are not group state, so they stay
+            if vote.active then ClearVote() end
             selection = nil
             if keyList then keyList:Hide() end
             KeyPort.Hide()

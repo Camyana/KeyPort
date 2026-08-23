@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.0
+
+- **Put the key to a vote.** The Vote button, or `/kp vote`, turns the party's
+  keystones into a ballot: everyone running KeyPort sees the list with a live
+  tally, clicks the key they want and casts. You can change your mind until the
+  clock runs out. The winner is sent to the party exactly as if someone had
+  picked it by hand, popup and chat line included.
+- The starter takes a snapshot of the keys on offer and sends it as the ballot,
+  so every client votes on the same list even where their keystone data differs.
+  Ballots are broadcast and tallied locally, so the count moves in real time on
+  every screen.
+- A tie goes to the higher key, then to the name, and only the player who
+  started the vote declares the result, so nobody sees a different winner.
+- `/kp vote 45` sets how long a vote runs (10 to 120 seconds, 30 by default).
+- Votes are cancelled by a run starting or by the group breaking up, and every
+  incoming ballot is validated against your own dungeon table like any other
+  KeyPort message.
+
 ## 1.3.3
 
 - The keystone level now sits beside the dungeon name rather than in a column

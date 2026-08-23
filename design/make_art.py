@@ -301,8 +301,12 @@ def dungeon_glyph(size, hue):
 # ---------------------------------------------------------------------------
 #  The keystone picker, at an integer magnification of the real window.
 # ---------------------------------------------------------------------------
-def picker(scale=3, rows=None, chosen=1, tab="Party"):
-    """rows: (player, colour, dungeon, level, hue, above, score) tuples."""
+def picker(scale=3, rows=None, chosen=1, tab="Party", vote=None):
+    """rows: (player, colour, dungeon, level, hue, above, score) tuples.
+
+    vote: None for the ordinary list, or (seconds, cast, total, {row: tally})
+    to draw it mid-ballot, where the score column carries the vote count.
+    """
     rows = rows or []
     S = scale
     W = LIST_W * S
@@ -390,13 +394,22 @@ def picker(scale=3, rows=None, chosen=1, tab="Party"):
             text(img, (cursor, mid), "+%d" % level, f_row, ABOVE if above else GOLD,
                  anchor="lm", offset=S / 4)
 
-        if score:
+        if vote:
+            tally = vote[3].get(i)
+            mine = (i == chosen)
+            text(img, (right_score, mid), str(tally) if tally else "-", f_row,
+                 ABOVE if mine else ACCENT, anchor="rm", offset=S / 4)
+        elif score:
             text(img, (right_score, mid), str(score), f_row, (176, 140, 224),
                  anchor="rm", offset=S / 4)
 
     # selection line
     choice_y = (top + 10) * S
     chosen_row = rows[chosen] if 0 <= chosen < len(rows) else None
+    if vote:
+        status = "Vote: %ds left   %d/%d cast" % (vote[0], vote[1], vote[2])
+        text(img, (W / 2, choice_y), status, f_choice, ACCENT, anchor="ma", offset=S / 4)
+        chosen_row = None
     if chosen_row:
         lvl_colour = ABOVE if chosen_row[5] else GOLD
         parts = [(chosen_row[2] + " ", (235, 240, 245)),
@@ -411,19 +424,21 @@ def picker(scale=3, rows=None, chosen=1, tab="Party"):
     # buttons along the bottom
     btn_h = 22 * S
     btn_y = H - LIST_PAD * S - btn_h
-    ref_w = 78 * S
-    send_w = W - LIST_PAD * S * 2 - 14 * S - ref_w - 6 * S
-    fill(img, (LIST_PAD * S, btn_y, LIST_PAD * S + send_w, btn_y + btn_h), (20, 23, 28, 242))
-    frame(img, (LIST_PAD * S, btn_y, LIST_PAD * S + send_w, btn_y + btn_h),
-          ACCENT + (90,), max(1, S // 2))
-    text(img, (LIST_PAD * S + send_w / 2, btn_y + btn_h / 2), "Send to Party", f_btn,
-         (255, 255, 255), anchor="mm", offset=S / 4)
+    vote_w, ref_w = 72 * S, 74 * S
+    send_w = W - LIST_PAD * S * 2 - 14 * S - vote_w - ref_w - 12 * S
 
-    ref_x = W - (LIST_PAD + 14) * S - ref_w
-    fill(img, (ref_x, btn_y, ref_x + ref_w, btn_y + btn_h), (20, 23, 28, 242))
-    frame(img, (ref_x, btn_y, ref_x + ref_w, btn_y + btn_h), ACCENT + (90,), max(1, S // 2))
-    text(img, (ref_x + ref_w / 2, btn_y + btn_h / 2), "Refresh", f_btn,
-         (215, 222, 230), anchor="mm", offset=S / 4)
+    def button(x, w, label, strong=True, dim=False):
+        fill(img, (x, btn_y, x + w, btn_y + btn_h), (20, 23, 28, 242 if not dim else 150))
+        frame(img, (x, btn_y, x + w, btn_y + btn_h), ACCENT + (45 if dim else 90,),
+              max(1, S // 2))
+        tint = (255, 255, 255) if strong else (215, 222, 230)
+        if dim:
+            tint = (120, 126, 134)
+        text(img, (x + w / 2, btn_y + btn_h / 2), label, f_btn, tint, anchor="mm", offset=S / 4)
+
+    button(LIST_PAD * S, send_w, "Voting..." if vote else "Send", strong=not vote, dim=bool(vote))
+    button(LIST_PAD * S + send_w + 6 * S, vote_w, "Cast" if vote else "Vote")
+    button(W - (LIST_PAD + 14) * S - ref_w, ref_w, "Refresh", strong=False)
 
     # resize grip
     grip = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -466,6 +481,15 @@ def build_picker():
     img.save(os.path.join(FULL, "keyport-picker@3x.png"))
     body = img.resize((round(img.width * 2 / 3), round(img.height * 2 / 3)), Image.LANCZOS)
     body.save(os.path.join(OUT, "keyport-picker.png"))
+    return img
+
+
+def build_vote():
+    img = picker(rows=PARTY_ROWS, chosen=1, vote=(18, 3, 5, {0: 1, 1: 2, 2: 0, 3: 0}))
+    os.makedirs(FULL, exist_ok=True)
+    img.save(os.path.join(FULL, "keyport-vote@3x.png"))
+    body = img.resize((round(img.width * 2 / 3), round(img.height * 2 / 3)), Image.LANCZOS)
+    body.save(os.path.join(OUT, "keyport-vote.png"))
     return img
 
 
@@ -747,6 +771,7 @@ if __name__ == "__main__":
     build_banner(pop)
     print("picker   ...")
     pick = build_picker()
+    build_vote()
     print("gallery  ...")
     build_gallery_command(pop)
     build_gallery_picker(pick)

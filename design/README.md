@@ -16,6 +16,7 @@ python design/make_art.py
 | `keyport-gallery-command.png` | 840×472 | Description body, and the **Images** gallery |
 | `keyport-gallery-codes.png` | 840×472 | Description body, and the **Images** gallery |
 | `keyport-picker.png` | 688×504 | The keystone list on its own |
+| `keyport-vote.png` | 688×504 | The same window mid-vote, for the voting section |
 | `keyport-popup.png` | 660×426, transparent | The popup on its own; spare for Discord, Reddit |
 | `keyport-icon-64.png` | 64×64 | Not uploaded; a check that the avatar survives the listing thumbnail |
 | `full-size/*.png` | 1280 wide | Optional: upload these to the **Images** gallery, where the lightbox shows them full size |

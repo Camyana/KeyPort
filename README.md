@@ -26,6 +26,16 @@ grip in the bottom right to resize it. Make it taller for more rows (the guild
 list scrolls with the wheel), narrower to fall back to short dungeon codes.
 Size and position are saved.
 
+## Putting it to a vote
+
+Rather than one person choosing, hit **Vote** (or `/kp vote`) and the list
+becomes a ballot: every party member running KeyPort sees the keys with a live
+tally, clicks one and casts. Votes can be changed until the clock runs out, and
+the winner is then sent to the party as if it had been picked by hand.
+
+A tie goes to the higher key, and only the player who started the vote declares
+the result, so nobody sees a different winner. `/kp vote 45` sets the length.
+
 A keystone level shows **green with an up arrow** when it is above your own
 season best for that dungeon, or in a dungeon you have not completed at all, and
 gold when it is at or below your best. The comparison is per viewer, so the same
@@ -56,6 +66,7 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp list` / `/kp list all` | This season's codes / every dungeon KeyPort knows |
 | `/kp share` | Toggle whether you receive reminders from your group |
 | `/kp announce` | Toggle the party chat line sent when a key goes out |
+| `/kp vote` | Put the party's keystones to a vote (`/kp vote 45` sets the length) |
 | `/kp guild` | Open the list on the guild tab |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |

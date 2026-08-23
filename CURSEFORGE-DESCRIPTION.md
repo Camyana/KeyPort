@@ -60,6 +60,17 @@ that dungeon's teleport lands on everyone's screen with the owner named on it.
 well, a **Mythic+ score** column, and a resize grip in the bottom right: taller
 for more rows, narrower for a compact list. Size and position are saved.
 
+### Or put it to a vote
+
+> Insert `keyport-vote.png` here.
+
+Rather than one person deciding, hit **Vote** and the list becomes a ballot:
+every party member running KeyPort sees the keys with a live tally, clicks one
+and casts. Minds can be changed until the clock runs out, then the winner goes
+out to the party exactly as if someone had picked it by hand. Ties go to the
+higher key, and only the player who started the vote declares the result, so
+nobody sees a different winner.
+
 A level shows **green with an up arrow** when the key is above your own season
 best for that dungeon, or in a dungeon you have never completed; gold when it is
 at or below your best. Each person sees it against their own record.
@@ -93,6 +104,7 @@ The number is the **keystone level**: `/kp kr 10` means Kings' Rest, key level 1
 | `/kp list` | This season's codes (`/kp list all` for every dungeon) |
 | `/kp share` | Toggle whether you receive reminders from your group |
 | `/kp announce` | Toggle the party chat line sent when a key goes out |
+| `/kp vote` | Put the party's keystones to a vote (`/kp vote 45` sets the length) |
 | `/kp guild` | Open the list on the guild tab |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
