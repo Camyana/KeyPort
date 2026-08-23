@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0
+
+- **The Recent tab is now a Friends tab.** Battle.net friends who are online in
+  WoW are asked directly what key they are holding, and answer with the dungeon,
+  level, rating and class. `/kp friends` opens it. Only friends who also run
+  KeyPort can answer: LibKeystone speaks to your party and guild, not across
+  Battle.net.
+- Friends' records grey out once they predate the weekly reset, exactly as the
+  recent list did, and their key reads *last week's key*.
+- `/kp friends share` opts out of the whole exchange in both directions, and
+  `/kp friends clear` forgets what has been collected. Asking is throttled, and
+  at most forty friends are contacted at a time.
+- Fixed: the window sized itself from the rows it had drawn rather than the rows
+  it had, so once it shrank it could not grow again. A full party could be shown
+  three rows.
+- Fixed: a key picked on the Alts or Friends tab was discarded the instant the
+  list refreshed, because it was being checked against the party's data.
+- Fixed: a friend's key in a dungeon this copy of KeyPort does not know now
+  drops the level with it, instead of sorting as if it were a real key.
+
 ## 1.6.0
 
 - **A Recent tab.** Players you group with are remembered along with the key

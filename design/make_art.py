@@ -341,7 +341,7 @@ def picker(scale=3, rows=None, chosen=1, tab="Party", vote=None):
     # tabs
     tab_y = (HEADER_H + 1) * S
     tab_x = (LIST_PAD - 2) * S
-    for name in ("Party", "Guild", "Alts", "Recent"):
+    for name in ("Party", "Guild", "Alts", "Friends"):
         tw = max(52 * S, width_of(name, f_tab) + 22 * S)
         active = (name == tab)
         text(img, (tab_x + tw / 2, tab_y + TAB_H * S / 2), name, f_tab,

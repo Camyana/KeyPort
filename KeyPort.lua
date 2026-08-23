@@ -163,7 +163,9 @@ local function InitDB()
     db.scale  = tonumber(db.scale) or 1
     db.custom = db.custom or {}   -- [challengeMapID] = spellID, user supplied
     db.alts   = db.alts   or {}   -- ["Name-Realm"] = this character's keystone
-    db.recent = db.recent or {}   -- ["Name-Realm"] = someone we grouped with
+    db.friends = db.friends or {} -- ["Name-Realm"] = a Battle.net friend's key
+    if db.friendShare == nil then db.friendShare = true end
+    db.recent = nil               -- the recent list became the friends list
     return db
 end
 
@@ -906,7 +908,7 @@ local function FullName(name, realm)
     return name .. "-" .. (realm:gsub("%s+", ""))
 end
 
-local RECENT_LIMIT = 50   -- keep the list from growing forever
+local FRIEND_LIMIT = 60   -- keep the list from growing forever
 
 -- Rough, friendly age of a record.
 local function TimeAgo(stamp)
@@ -919,37 +921,125 @@ local function TimeAgo(stamp)
 end
 
 -- Drop the oldest entries once the list gets long.
-local function PruneRecent()
+local function PruneFriends()
     local order = {}
-    for full, rec in pairs(db.recent) do order[#order + 1] = { full = full, at = rec.seen or 0 } end
-    if #order <= RECENT_LIMIT then return end
+    for full, rec in pairs(db.friends) do order[#order + 1] = { full = full, at = rec.seen or 0 } end
+    if #order <= FRIEND_LIMIT then return end
     table.sort(order, function(a, b) return a.at > b.at end)
-    for i = RECENT_LIMIT + 1, #order do db.recent[order[i].full] = nil end
+    for i = FRIEND_LIMIT + 1, #order do db.friends[order[i].full] = nil end
 end
 
---- Remember someone we grouped with, and whatever key they were carrying.
-local function RecordRecent(fullName, short, level, mapID, rating)
-    if not db or not db.recent or not fullName or not short then return end
-    if short == UnitName("player") then return end   -- that is what the Alts tab is for
-
-    local previous = db.recent[fullName] or {}
-    local classFile = previous.classFile
-    local unit = UnitForName(short)
-    if unit then
-        local _, class = UnitClass(unit)
-        classFile = class or classFile
-    end
-
-    db.recent[fullName] = {
-        name = short,
+--- Record what a Battle.net friend answered with.
+local function RecordFriend(fullName, classFile, level, mapID, rating, account)
+    if not db or not db.friends or not fullName then return end
+    local previous = db.friends[fullName] or {}
+    db.friends[fullName] = {
+        name = fullName:match("^([^%-]+)") or fullName,
         realm = fullName:match("%-(.+)$") or previous.realm,
-        classFile = classFile,
+        classFile = classFile or previous.classFile,
+        account = account or previous.account,
         mapID = (mapID or 0) > 0 and mapID or nil,
         level = level or 0,
         rating = rating or previous.rating or 0,
         seen = (time and time()) or 0,
     }
-    PruneRecent()
+    PruneFriends()
+    if keyList and keyList:IsShown() and activeTab == "FRIENDS" then
+        KeyPort.RefreshKeyList()
+    end
+end
+
+-------------------------------------------------------------------------------
+--  Battle.net friends
+--  LibKeystone only speaks PARTY and GUILD, so friends are asked directly over
+--  Battle.net game data. Only friends who also run KeyPort can answer; there is
+--  no way to read a keystone off someone who is not broadcasting it.
+-------------------------------------------------------------------------------
+local FRIEND_ASK, FRIEND_TELL = "FQ1", "FA1"
+local FRIEND_ASK_THROTTLE = 20
+local MAX_FRIENDS_ASKED = 40
+local lastFriendAsk = 0
+
+local function OwnKeystoneReport()
+    local mapID = (C_MythicPlus and C_MythicPlus.GetOwnedKeystoneChallengeMapID
+                   and C_MythicPlus.GetOwnedKeystoneChallengeMapID()) or 0
+    local level = (C_MythicPlus and C_MythicPlus.GetOwnedKeystoneLevel
+                   and C_MythicPlus.GetOwnedKeystoneLevel()) or 0
+    local rating = 0
+    if C_PlayerInfo and C_PlayerInfo.GetPlayerMythicPlusRatingSummary then
+        local ok, summary = pcall(C_PlayerInfo.GetPlayerMythicPlusRatingSummary, "player")
+        if ok and type(summary) == "table" and type(summary.currentSeasonScore) == "number" then
+            rating = summary.currentSeasonScore
+        end
+    end
+    local _, classFile = UnitClass("player")
+    local name = UnitName("player") or "?"
+    local realm = (GetRealmName and GetRealmName() or ""):gsub("%s+", "")
+    return ("%s:%d:%d:%d:%s:%s-%s"):format(FRIEND_TELL, mapID or 0, level or 0, rating,
+                                           classFile or "", name, realm)
+end
+
+local function SendToFriend(gameAccountID, payload)
+    if not (BNSendGameData and gameAccountID) then return end
+    pcall(BNSendGameData, gameAccountID, COMM_PREFIX, payload)
+end
+
+--- Ask every Battle.net friend playing WoW what key they are holding.
+local function AskFriends(force)
+    if not db.friendShare then return 0 end
+    local now = GetTime()
+    if not force and (now - lastFriendAsk) < FRIEND_ASK_THROTTLE then return 0 end
+    lastFriendAsk = now
+
+    local total = (BNGetNumFriends and BNGetNumFriends()) or 0
+    local asked = 0
+    for i = 1, total do
+        if asked >= MAX_FRIENDS_ASKED then break end
+        local account = C_BattleNet and C_BattleNet.GetFriendAccountInfo
+                        and C_BattleNet.GetFriendAccountInfo(i)
+        local game = account and account.gameAccountInfo
+        if game and game.isOnline and game.gameAccountID
+           and game.clientProgram == (BNET_CLIENT_WOW or "WoW") then
+            SendToFriend(game.gameAccountID, FRIEND_ASK)
+            asked = asked + 1
+        end
+    end
+    return asked
+end
+
+--- A friend's addon spoke to us. Everything is validated before it is stored.
+local function HandleFriendMessage(payload, bnSenderID)
+    if type(payload) ~= "string" then return end
+    if not db.friendShare then return end
+
+    if payload == FRIEND_ASK then
+        local account = C_BattleNet and C_BattleNet.GetAccountInfoByID
+                        and C_BattleNet.GetAccountInfoByID(bnSenderID)
+        local game = account and account.gameAccountInfo
+        if game and game.gameAccountID then SendToFriend(game.gameAccountID, OwnKeystoneReport()) end
+        return
+    end
+
+    local rawMap, rawLevel, rawRating, class, who =
+        payload:match("^" .. FRIEND_TELL .. ":(%d+):(%d+):(%d+):(%a*):(.+)$")
+    if not rawMap then return end
+
+    local mapID, level, rating = tonumber(rawMap), tonumber(rawLevel), tonumber(rawRating)
+    local fullName = CleanName(who)
+    if not fullName or fullName == "" then return end
+    if not level or level < 0 or level > 100 then level = 0 end
+    if not rating or rating < 0 or rating > 100000 then rating = 0 end
+    -- A dungeon we do not know is dropped, and the level goes with it: half a
+    -- keystone would sort as if it were real and display as if it were not.
+    if mapID and mapID > 0 and not catalog.byMap[mapID] then mapID, level = 0, 0 end
+    -- The class only matters as a colour key, so anything unknown is dropped.
+    local colours = (_G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)
+    if class == "" or not (colours and colours[class]) then class = nil end
+
+    local account = C_BattleNet and C_BattleNet.GetAccountInfoByID
+                    and C_BattleNet.GetAccountInfoByID(bnSenderID)
+    RecordFriend(fullName, class, level, mapID, rating,
+                 account and (account.accountName or account.battleTag))
 end
 
 --- Record this character's keystone in the account-wide list.
@@ -1080,12 +1170,8 @@ end
 
 -- LibKeystone hands us one player's key. A level or map of 0 means "no key".
 local function StoreKeystone(level, mapID, rating, name, channel)
-    local fullName = CleanName(name)
     name = CleanName(name and ShortName(name))
     if not name then return end
-    if channel == "PARTY" and fullName then
-        RecordRecent(fullName, name, level, mapID, rating)
-    end
     local store = Store(channel == "GUILD" and "GUILD" or "PARTY")
     if type(level) ~= "number" or type(mapID) ~= "number" or level <= 0 or mapID <= 0 then
         -- Keep the rating even when there is no key: it is still worth showing.
@@ -1282,6 +1368,9 @@ local function BuildRow(parent, index)
         if self.seen then
             GameTooltip:AddLine("Last seen " .. TimeAgo(self.seen), 0.5, 0.52, 0.56)
         end
+        if self.account then
+            GameTooltip:AddLine(self.account, 0.35, 0.78, 1)
+        end
         if self.realm then
             GameTooltip:AddLine(self.realm, 0.5, 0.52, 0.56)
             GameTooltip:AddLine("Right-click to forget this character.", 0.6, 0.63, 0.68, true)
@@ -1298,7 +1387,7 @@ local function BuildRow(parent, index)
     row:SetScript("OnClick", function(self, button)
         if button == "RightButton" then
             local store = (activeTab == "ALTS" and db.alts)
-                          or (activeTab == "RECENT" and db.recent)
+                          or (activeTab == "FRIENDS" and db.friends)
             if store and self.fullName and store[self.fullName] then
                 store[self.fullName] = nil
                 if selection and selection.name == self.owner then selection = nil end
@@ -1428,7 +1517,7 @@ local function BuildKeyList()
         TabButton(keyList, "Party", "PARTY"),
         TabButton(keyList, "Guild", "GUILD"),
         TabButton(keyList, "Alts", "ALTS"),
-        TabButton(keyList, "Recent", "RECENT"),
+        TabButton(keyList, "Friends", "FRIENDS"),
     }
     keyList.tabs[1]:SetPoint("TOPLEFT", LIST_PAD - 2, -(HEADER_H + 1))
     keyList.tabs[2]:SetPoint("LEFT", keyList.tabs[1], "RIGHT", 2, 0)
@@ -1522,7 +1611,7 @@ local function BuildKeyList()
 end
 
 function KeyPort.SetTab(tab)
-    if tab ~= "PARTY" and tab ~= "GUILD" and tab ~= "ALTS" and tab ~= "RECENT" then return end
+    if tab ~= "PARTY" and tab ~= "GUILD" and tab ~= "ALTS" and tab ~= "FRIENDS" then return end
     if activeTab == tab then return end
     activeTab = tab
     scrollOffset = 0
@@ -1531,6 +1620,8 @@ function KeyPort.SetTab(tab)
         RefreshGuildRoster()
     elseif tab == "ALTS" then
         KeyPort.RecordOwnKeystone()
+    elseif tab == "FRIENDS" then
+        AskFriends()
     end
     if tab == "PARTY" or tab == "GUILD" then RequestKeystones(tab) end
     KeyPort.RefreshKeyList()
@@ -1551,9 +1642,9 @@ local function CollectRows()
                 rating = key and key.rating or 0,
             }
         end
-    elseif activeTab == "RECENT" then
+    elseif activeTab == "FRIENDS" then
         local fresh = WeekStart()
-        for fullName, rec in pairs(db.recent or {}) do
+        for fullName, rec in pairs(db.friends or {}) do
             local stale = (rec.seen or 0) < fresh
             rows[#rows + 1] = {
                 name = rec.name or fullName,
@@ -1566,11 +1657,16 @@ local function CollectRows()
                 stale = stale and (rec.level or 0) > 0,
                 dim = stale,
                 realm = rec.realm,
+                account = rec.account,
                 seen = rec.seen,
             }
         end
-        -- Most recently seen first: that is what makes it the recent list.
-        table.sort(rows, function(a, b) return (a.seen or 0) > (b.seen or 0) end)
+        -- Keys first, then the highest, then whoever answered most recently.
+        table.sort(rows, function(a, b)
+            if (a.level > 0) ~= (b.level > 0) then return a.level > 0 end
+            if a.level ~= b.level then return a.level > b.level end
+            return (a.seen or 0) > (b.seen or 0)
+        end)
         return rows
     elseif activeTab == "ALTS" then
         local fresh = WeekStart()
@@ -1620,9 +1716,23 @@ function KeyPort.RefreshKeyList()
     local rows = CollectRows()
     keyList.rowCount = #rows
 
+    -- Size to the data before drawing. Sizing afterwards, from the number of
+    -- rows actually drawn, could only ever shrink: a window showing three rows
+    -- stayed three rows tall no matter how many keys arrived.
+    if not db.listSize then
+        local want = ChromeHeight() + math.max(MIN_ROWS, math.min(MAX_ROWS, #rows)) * ROW_H
+        if math.abs(keyList:GetHeight() - want) > 0.5 then
+            keyList:SetHeight(want)
+            LayoutList()
+        end
+    end
+
     -- Drop a selection whose key changed or whose owner is gone.
-    if selection and selection.tab == "ALTS" then
-        -- Alt rows are not in the party or guild stores; leave them alone.
+    -- Only the live tabs are re-validated. Alts and friends are stored records,
+    -- not something LibKeystone refreshes, so there is nothing to check them
+    -- against and doing so would silently drop the selection.
+    if selection and selection.tab ~= "PARTY" and selection.tab ~= "GUILD" then
+        -- stored record: leave it alone
     elseif selection and not vote.active then
         local key = Store(selection.tab or "PARTY")[selection.name]
         if not key or key.mapID ~= selection.mapID or key.level ~= selection.level then
@@ -1645,7 +1755,7 @@ function KeyPort.RefreshKeyList()
             row.owner, row.mapID, row.keyLevel = data.name, data.mapID, data.level
             row.rating = data.rating
             row.realm, row.fullName = data.realm, data.fullName
-            row.seen = data.seen
+            row.seen, row.account = data.seen, data.account
             row.player:SetText(data.name or "?")
             local pr, pg, pb = ClassRGBFor(data.unit, data.classFile)
             if data.dim then
@@ -1748,18 +1858,15 @@ function KeyPort.RefreshKeyList()
             blank = "No guild keystones yet.\nGuildmates need KeyPort, DBM, BigWigs or\nanother addon that shares keys."
         elseif activeTab == "ALTS" then
             blank = "No characters recorded yet.\nLog in on an alt with KeyPort installed and it\nwill appear here."
-        elseif activeTab == "RECENT" then
-            blank = "Nobody recorded yet.\nPlayers you group with are remembered here,\nalong with the key they were carrying."
+        elseif activeTab == "FRIENDS" then
+            blank = db.friendShare
+                and "No answers yet.\nBattle.net friends appear here if they are online\nand also running KeyPort."
+                or "Sharing with friends is off.\nTurn it back on with /kp friends share."
         end
         keyList.empty:SetText(blank)
         keyList.empty:Show()
     else
         keyList.empty:Hide()
-    end
-
-    -- Auto-height until the window is resized by hand, then respect the size.
-    if not db.listSize then
-        keyList:SetHeight(ChromeHeight() + math.max(shown_count, MIN_ROWS) * ROW_H)
     end
 
     local base = keyList:GetHeight() - (30 + 22 + LIST_PAD)
@@ -1870,6 +1977,8 @@ function KeyPort.OpenKeyList(tab)
         RefreshGuildRoster()
     elseif activeTab == "ALTS" then
         KeyPort.RecordOwnKeystone()
+    elseif activeTab == "FRIENDS" then
+        AskFriends()
     end
     -- LibKeystone only knows PARTY and GUILD; the alts list is local data.
     if activeTab == "PARTY" or activeTab == "GUILD" then RequestKeystones(activeTab) end
@@ -2237,8 +2346,9 @@ local function Usage()
     print("  " .. ACCENT .. "/kp guild|r  open the list on the guild tab")
     print("  " .. ACCENT .. "/kp alts|r  your other characters' keystones (" ..
           ACCENT .. "/kp alts clear|r forgets them)")
-    print("  " .. ACCENT .. "/kp recent|r  players you have grouped with (" ..
-          ACCENT .. "/kp recent clear|r forgets them)")
+    print("  " .. ACCENT .. "/kp friends|r  your Battle.net friends' keystones")
+    print("     (" .. ACCENT .. "/kp friends share|r opts out, " ..
+          ACCENT .. "/kp friends clear|r forgets them)")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
     print("  " .. ACCENT .. "/kp scale 1.2|r  resize the popup")
@@ -2365,14 +2475,20 @@ local function HandleSlash(input)
         return
     elseif verb == "guild" then
         KeyPort.OpenKeyList("GUILD"); return
-    elseif verb == "recent" then
-        if rest:lower() == "clear" then
-            wipe(db.recent)
-            Print("forgot everyone on the recent list.")
+    elseif verb == "friends" then
+        local option = rest:lower()
+        if option == "clear" then
+            wipe(db.friends)
+            Print("forgot every friend's keystone.")
             if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
             return
+        elseif option == "share" then
+            db.friendShare = not db.friendShare
+            Print("sharing keystones with Battle.net friends: " ..
+                  (db.friendShare and "|cff40ff40on|r" or "|cffff4040off|r"))
+            return
         end
-        KeyPort.OpenKeyList("RECENT"); return
+        KeyPort.OpenKeyList("FRIENDS"); return
     elseif verb == "alts" then
         if rest:lower() == "clear" then
             wipe(db.alts)
@@ -2640,6 +2756,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         end
         ClaimKeysCommand()
         self:RegisterEvent("CHAT_MSG_ADDON")
+        self:RegisterEvent("BN_CHAT_MSG_ADDON")
         self:RegisterEvent("GUILD_ROSTER_UPDATE")
         self:RegisterEvent("CHALLENGE_MODE_START")
         self:RegisterEvent("CHALLENGE_MODE_COMPLETED")
@@ -2655,6 +2772,12 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         if a1 ~= COMM_PREFIX or type(a2) ~= "string" then return end
         if a3 ~= "PARTY" and a3 ~= "INSTANCE_CHAT" then return end
         HandleMessage(a2, a4)
+        return
+
+    elseif event == "BN_CHAT_MSG_ADDON" then
+        -- a1 prefix, a2 payload, a3 channel, a4 Battle.net sender id
+        if a1 ~= COMM_PREFIX or type(a2) ~= "string" then return end
+        HandleFriendMessage(a2, a4)
         return
 
     elseif event == "GUILD_ROSTER_UPDATE" then

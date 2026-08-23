@@ -21,7 +21,7 @@ colour. Click a key to select it,
 then **Send to Party** puts that dungeon's teleport on everyone's screen, with
 the owner named on the popup.
 
-The window has **Party**, **Guild**, **Alts** and **Recent** tabs, a **Mythic+ score** column, and a
+The window has **Party**, **Guild**, **Alts** and **Friends** tabs, a **Mythic+ score** column, and a
 grip in the bottom right to resize it. Make it taller for more rows (the guild
 list scrolls with the wheel), narrower to fall back to short dungeon codes.
 Size and position are saved.
@@ -73,7 +73,7 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
 | `/kp alts` | Your other characters' keystones (`/kp alts clear` forgets them) |
-| `/kp recent` | Players you have grouped with (`/kp recent clear` forgets them) |
+| `/kp friends` | Your Battle.net friends' keystones (`share` opts out, `clear` forgets) |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
 | `/kp map <dungeon> <spellID>` | Teach it a teleport it doesn't know yet (a teleport *spell id*, not a key level) |
@@ -109,13 +109,17 @@ in to find out. Keys from before the weekly reset are shown as *last week's
 key* rather than pretending to still exist. Right-click a character to forget
 it.
 
-## Recent players
+## Battle.net friends
 
-Everyone you group with is remembered on the **Recent** tab along with the key
-they were carrying, newest first. Once a record is older than the weekly reset
-the row is greyed out and its key reads *last week's key*, because that is all
-a cached keystone is worth by then. The tooltip says when you last saw them,
-and right-click forgets a player.
+The **Friends** tab asks your Battle.net friends who are online in WoW what key
+they are holding. Only friends who also run KeyPort can answer, since the
+library the party and guild tabs use does not reach across Battle.net.
+
+Records grey out once they predate the weekly reset and their key reads *last
+week's key*, because that is all a cached keystone is worth by then. The tooltip
+shows the friend's account name and when they last answered, and right-click
+forgets one. `/kp friends share` opts out of the exchange entirely, in both
+directions.
 
 ## When KeyPort stays out of the way
 
