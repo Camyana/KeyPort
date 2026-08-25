@@ -450,14 +450,29 @@ local function SavePosition()
     if point then db.pos = { point = point, relPoint = relPoint, x = x, y = y } end
 end
 
-local function RestorePosition()
+-- EllesmereUI's LFG Reminder defaults to CENTER, 0, 150, and so did this, so
+-- the two landed exactly on top of each other: two teleport buttons in the same
+-- place, one of them stale, both looking right. Sit clear of it when that addon
+-- is present rather than fighting over the spot.
+local function DefaultAnchorY()
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded or _G.IsAddOnLoaded
+    if loaded then
+        local ok, present = pcall(loaded, "EllesmereUIQoL")
+        if ok and present then return -20 end
+    end
+    return 150
+end
+
+-- Declared as a local up here because /kp reset, far below, calls it.
+local RestorePosition
+RestorePosition = function()
     if not panel then return end
     panel:ClearAllPoints()
     local pos = db and db.pos
     if pos and pos.point then
         panel:SetPoint(pos.point, UIParent, pos.relPoint or pos.point, pos.x or 0, pos.y or 0)
     else
-        panel:SetPoint("CENTER", UIParent, "CENTER", 0, 150)
+        panel:SetPoint("CENTER", UIParent, "CENTER", 0, DefaultAnchorY())
     end
 end
 
@@ -2352,6 +2367,7 @@ local function Usage()
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
     print("  " .. ACCENT .. "/kp scale 1.2|r  resize the popup")
+    print("  " .. ACCENT .. "/kp reset|r  put both windows back where they started")
     print("  " .. ACCENT .. "/kp map <dungeon> <spellID>|r  teach it a missing teleport")
     print("     (a teleport spell id, not a keystone level)")
 end
@@ -2528,6 +2544,20 @@ local function HandleSlash(input)
         db.acceptShares = not db.acceptShares
         Print("reminders from your group: " ..
               (db.acceptShares and "|cff40ff40on|r" or "|cffff4040off|r"))
+        return
+    elseif verb == "reset" then
+        -- For a window dragged off-screen, or one sitting on top of another
+        -- addon's popup.
+        db.pos, db.listPos, db.listSize = nil, nil, nil
+        if panel then RestorePosition() end
+        if keyList then
+            keyList:ClearAllPoints()
+            keyList:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+            keyList:SetSize(DEFAULT_W, ChromeHeight() + PARTY_SIZE * ROW_H)
+            LayoutList()
+            KeyPort.RefreshKeyList()
+        end
+        Print("windows moved back where they started.")
         return
     elseif verb == "scale" then
         local value = tonumber(rest)
@@ -2757,6 +2787,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         ClaimKeysCommand()
         self:RegisterEvent("CHAT_MSG_ADDON")
         self:RegisterEvent("BN_CHAT_MSG_ADDON")
+        self:RegisterEvent("LFG_LIST_JOINED_GROUP")
         self:RegisterEvent("GUILD_ROSTER_UPDATE")
         self:RegisterEvent("CHALLENGE_MODE_START")
         self:RegisterEvent("CHALLENGE_MODE_COMPLETED")
@@ -2808,6 +2839,14 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         wipe(keystones)
         selection = nil
         if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
+        return
+
+    elseif event == "LFG_LIST_JOINED_GROUP" then
+        -- You just joined someone else's group, so whatever key was on screen
+        -- (a vote result, a shared key) is about the group you were in a moment
+        -- ago. Stand down and leave the field to the Group Finder reminder,
+        -- which is the one that is right now.
+        KeyPort.Hide()
         return
 
     elseif event == "PLAYER_REGEN_DISABLED" then

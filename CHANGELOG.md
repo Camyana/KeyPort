@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.7.1
+
+- **Joining a Group Finder group now stands the popup down.** A vote result or
+  a shared key is about the group you were in a moment ago, so it is dismissed
+  rather than left on screen alongside the reminder for the group you just
+  joined. A popup queued behind combat is dropped too.
+- **The popup no longer opens on top of EllesmereUI's LFG Reminder.** Both
+  defaulted to the same spot, so with that addon installed the two landed
+  exactly on top of each other, one of them stale and both looking right.
+  KeyPort now sits clear of it when EllesmereUI QoL is present.
+- `/kp reset` puts both windows back where they started, for one dragged
+  off-screen or parked somewhere awkward.
+
 ## 1.7.0
 
 - **The Recent tab is now a Friends tab.** Battle.net friends who are online in

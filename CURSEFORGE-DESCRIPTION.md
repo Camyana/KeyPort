@@ -113,6 +113,7 @@ The number is the **keystone level**: `/kp kr 10` means Kings' Rest, key level 1
 | `/kp friends` | Your Battle.net friends' keystones (`share` opts out, `clear` forgets) |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
+| `/kp reset` | Put both windows back where they started |
 | `/kp map <dungeon> <spellID>` | Teach KeyPort a teleport it doesn't know yet (a teleport spell id, not a key level) |
 
 `/keyport` is an alias for `/kp`.
@@ -135,7 +136,8 @@ guessing.
 - Drag the popup anywhere; position and scale are saved.
 - The teleport button shows the real spell icon and its cooldown swipe, and greys
   out with *Teleport not learned* if you haven't earned that teleport yet.
-- Auto-hides when you enter the dungeon, leave the group, or enter combat.
+- Auto-hides when you enter the dungeon, leave the group, enter combat, or join
+  a Group Finder group.
 - The footer tells you where it came from: *Sent to your party*, or
   *Shared by \<name\>*.
 - Nothing runs on a timer, and no addon is required: LibKeystone rides along

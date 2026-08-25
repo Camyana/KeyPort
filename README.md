@@ -76,6 +76,7 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp friends` | Your Battle.net friends' keystones (`share` opts out, `clear` forgets) |
 | `/kp keys off\|auto\|force` | Whether `/keys` opens KeyPort |
 | `/kp scale 1.2` | Resize the popup |
+| `/kp reset` | Put both windows back where they started |
 | `/kp map <dungeon> <spellID>` | Teach it a teleport it doesn't know yet (a teleport *spell id*, not a key level) |
 
 `/keyport` is an alias for `/kp`.
@@ -98,7 +99,9 @@ lists the candidates instead of guessing.
 * Drag to move; position and scale are saved.
 * The teleport button shows the spell icon and cooldown swipe, and greys out
   with "Teleport not learned" if you haven't earned that teleport.
-* Auto-hides when you enter the dungeon, leave the group, or enter combat.
+* Auto-hides when you enter the dungeon, leave the group, enter combat, or
+  join a Group Finder group (whatever was on screen belonged to the group you
+  were in a moment ago).
 * Footer shows where it came from: *Sent to your party*, or *Shared by \<name\>*.
 
 ## Your alts
