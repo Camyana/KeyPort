@@ -69,6 +69,7 @@ The number is the **keystone level**: `/kp kr 10` is Kings' Rest, key level 10.
 | `/kp list` / `/kp list all` | This season's codes / every dungeon KeyPort knows |
 | `/kp share` | Toggle whether you receive reminders from your group |
 | `/kp announce` | Toggle the party chat line sent when a key goes out |
+| `/kp full` | Toggle the reminder when a Group Finder group fills |
 | `/kp vote` | Choose keys for a ballot, then Start (`/kp vote 45` sets the length) |
 | `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
@@ -123,6 +124,14 @@ week's key*, because that is all a cached keystone is worth by then. The tooltip
 shows the friend's account name and when they last answered, and right-click
 forgets one. `/kp friends share` opts out of the exchange entirely, in both
 directions.
+
+## Group Finder groups
+
+Join a listed group, or advertise your own, and KeyPort remembers the dungeon
+from the listing. When the group fills, the teleport reminder goes up on its
+own, with the key level attached if anyone in the group has reported that
+dungeon's keystone. Nothing is broadcast and nothing is posted to chat, because
+everyone running KeyPort watches their own group fill. `/kp full` turns it off.
 
 ## When KeyPort stays out of the way
 

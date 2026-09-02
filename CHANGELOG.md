@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.0
+
+- **The reminder now fires when a Group Finder group fills.** The dungeon is
+  read from the listing you joined (or the one your group is advertising) and
+  held; the moment the last member arrives, the teleport goes up. If someone in
+  the group has reported that dungeon's key, its level is shown with it.
+- The listing is read the instant you join, which is the only moment the search
+  result is both readable and still alive, and every field is guarded: a value
+  the client keeps secret costs the popup, never an error.
+- It is local: everyone running KeyPort sees their own group fill, so nothing
+  is broadcast and no chat line is posted. `/kp full` turns it off.
+- A new listing replaces the old one, so joining a raid or anything without a
+  teleport leaves nothing armed behind.
+
 ## 1.7.1
 
 - **Joining a Group Finder group now stands the popup down.** A vote result or

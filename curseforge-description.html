@@ -54,6 +54,7 @@
     <tr><td><code>/kp list</code></td><td>This season's codes (<code>/kp list all</code> for every dungeon)</td></tr>
     <tr><td><code>/kp share</code></td><td>Toggle whether you receive reminders from your group</td></tr>
     <tr><td><code>/kp announce</code></td><td>Toggle the party chat line sent when a key goes out</td></tr>
+    <tr><td><code>/kp full</code></td><td>Toggle the reminder when a Group Finder group fills</td></tr>
     <tr><td><code>/kp vote</code></td><td>Choose keys for a ballot, then Start (<code>/kp vote 45</code> sets the length)</td></tr>
     <tr><td><code>/kp vote all</code></td><td>Skip the choosing and put every key up</td></tr>
     <tr><td><code>/kp guild</code></td><td>Open the list on the guild tab</td></tr>
@@ -97,6 +98,10 @@
 <h3>The /keys command</h3>
 
 <p><code>/keys</code> opens KeyPort, even if another addon already registered it. If you would rather keep that addon's window, <code>/kp keys auto</code> yields to whoever has it and <code>/kp keys off</code> leaves it alone; KeyPort remembers the previous owner, so it hands <code>/keys</code> straight back.</p>
+
+<h3>Group Finder groups</h3>
+
+<p>Join a listed group, or advertise your own, and KeyPort remembers the dungeon from the listing. When the group fills, the teleport goes up on its own, with the key level attached if anyone in the group has reported that keystone. Nothing is broadcast and nothing is posted to chat: everyone running KeyPort watches their own group fill. <code>/kp full</code> turns it off.</p>
 
 <h3>When it stays out of the way</h3>
 

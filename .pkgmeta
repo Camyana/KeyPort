@@ -12,6 +12,7 @@ ignore:
   - dist
   - design
   - tools
+  - tools
   - legacy-ellesmereui-companion
   - CURSEFORGE-DESCRIPTION.md
   - curseforge-description.html

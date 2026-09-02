@@ -165,6 +165,7 @@ local function InitDB()
     db.alts   = db.alts   or {}   -- ["Name-Realm"] = this character's keystone
     db.friends = db.friends or {} -- ["Name-Realm"] = a Battle.net friend's key
     if db.friendShare == nil then db.friendShare = true end
+    if db.fullPopup == nil then db.fullPopup = true end
     db.recent = nil               -- the recent list became the friends list
     return db
 end
@@ -2342,6 +2343,111 @@ HandleVoteMessage = function(payload, sender)
 end
 
 -------------------------------------------------------------------------------
+--  GROUP FINDER
+--  A listed group is rarely complete when you join it, and the dungeon is not
+--  worth a popup until everyone is actually there. So the dungeon is captured
+--  from the listing and held; the reminder goes up the moment the group fills.
+--
+--  Reading the listing is the delicate part. While browsing, the search result
+--  hands back secret values, and joining is what lifts that; the result can
+--  also expire moments later. So the read happens immediately on joining,
+--  wrapped in pcall and guarded field by field: a secret value costs us the
+--  popup, never an error.
+-------------------------------------------------------------------------------
+local pendingLFG          -- { mapID, name, size } captured from the listing
+local issecret = _G.issecretvalue or function() return false end
+
+local function RememberActivity(activityID)
+    if activityID == nil or issecret(activityID) then return end
+    if not (C_LFGList and C_LFGList.GetActivityInfoTable) then return end
+    local act = C_LFGList.GetActivityInfoTable(activityID)
+    if type(act) ~= "table" then return end
+
+    local fullName = act.fullName
+    if type(fullName) ~= "string" or issecret(fullName) then return end
+
+    -- Our own catalog does the matching, and Squash already drops a trailing
+    -- "(Mythic Keystone)", so the listing name resolves straight to a dungeon.
+    local entry = Lookup(fullName)
+    if not entry or not entry.spellID then return end
+
+    local size = act.maxNumPlayers
+    if type(size) ~= "number" or size <= 0 or size > PARTY_SIZE then size = PARTY_SIZE end
+
+    pendingLFG = { mapID = entry.mapID, name = entry.name, size = size }
+    RequestKeystones("PARTY")   -- so a level is known by the time it fills
+end
+
+-- Joining someone else's listed group. A new listing supersedes the old one,
+-- so the previous dungeon is dropped first: if this listing turns out to be a
+-- raid, or something with no teleport, it must leave nothing armed behind.
+local function CaptureJoinedGroup(resultID)
+    pendingLFG = nil
+    if not (C_LFGList and C_LFGList.GetSearchResultInfo) then return end
+    pcall(function()
+        local info = C_LFGList.GetSearchResultInfo(resultID)
+        if type(info) ~= "table" then return end
+        local activityID = info.activityID
+        if activityID == nil and info.activityIDs and not issecret(info.activityIDs) then
+            activityID = info.activityIDs[1]
+        end
+        RememberActivity(activityID)
+    end)
+end
+
+-- Our own group's listing, for when we are the one advertising the key.
+local function CaptureOwnListing()
+    pendingLFG = nil
+    if not (C_LFGList and C_LFGList.GetActiveEntryInfo) then return end
+    pcall(function()
+        local info = C_LFGList.GetActiveEntryInfo()
+        if type(info) ~= "table" then return end
+        local activityID = info.activityID
+        if activityID == nil and info.activityIDs and not issecret(info.activityIDs) then
+            activityID = info.activityIDs[1]
+        end
+        RememberActivity(activityID)
+    end)
+end
+
+local function ForgetListing()
+    pendingLFG = nil
+end
+
+-- The best key in the party for that dungeon, if anyone has reported one.
+local function PartyKeyFor(mapID)
+    local bestLevel, owner
+    for name, key in pairs(keystones) do
+        if key.mapID == mapID and (key.level or 0) > 0 then
+            if not bestLevel or key.level > bestLevel then
+                bestLevel, owner = key.level, name
+            end
+        end
+    end
+    return bestLevel, owner
+end
+
+--- Raise the reminder once the group the listing was for is complete.
+function KeyPort.CheckGroupFull()
+    if not pendingLFG or not db.fullPopup then return end
+    if BlockedReason() then return end
+    if not IsInGroup() or IsInRaid() then return end
+    if (GetNumGroupMembers() or 0) < (pendingLFG.size or PARTY_SIZE) then return end
+
+    local entry = catalog.byMap[pendingLFG.mapID]
+    if not entry or not entry.spellID then ForgetListing(); return end
+
+    local level, owner = PartyKeyFor(pendingLFG.mapID)
+    ForgetListing()   -- one popup per listing, not one per roster change
+
+    -- Local only: everyone running KeyPort sees their group fill at the same
+    -- moment, so broadcasting would put five copies of the same message on the
+    -- wire and a chat line five times over.
+    KeyPort.Show(entry, level or 0,
+                 owner and (owner .. "'s key, group is full") or "Group is full")
+end
+
+-------------------------------------------------------------------------------
 --  SLASH
 -------------------------------------------------------------------------------
 local function Usage()
@@ -2365,6 +2471,7 @@ local function Usage()
     print("     (" .. ACCENT .. "/kp friends share|r opts out, " ..
           ACCENT .. "/kp friends clear|r forgets them)")
     print("  " .. ACCENT .. "/kp announce|r  toggle the party chat line when a key is sent")
+    print("  " .. ACCENT .. "/kp full|r  toggle the reminder when a Group Finder group fills")
     print("  " .. ACCENT .. "/kp keys off|auto|force|r  whether /keys opens KeyPort")
     print("  " .. ACCENT .. "/kp scale 1.2|r  resize the popup")
     print("  " .. ACCENT .. "/kp reset|r  put both windows back where they started")
@@ -2534,6 +2641,11 @@ local function HandleSlash(input)
         else
             Print("/keys belongs to another addon. Use " .. ACCENT .. "/kp keys force|r to take it.")
         end
+        return
+    elseif verb == "full" then
+        db.fullPopup = not db.fullPopup
+        Print("reminder when a Group Finder group fills: " ..
+              (db.fullPopup and "|cff40ff40on|r" or "|cffff4040off|r"))
         return
     elseif verb == "announce" or verb == "say" then
         db.announce = not db.announce
@@ -2788,6 +2900,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         self:RegisterEvent("CHAT_MSG_ADDON")
         self:RegisterEvent("BN_CHAT_MSG_ADDON")
         self:RegisterEvent("LFG_LIST_JOINED_GROUP")
+        self:RegisterEvent("LFG_LIST_ACTIVE_ENTRY_UPDATE")
         self:RegisterEvent("GUILD_ROSTER_UPDATE")
         self:RegisterEvent("CHALLENGE_MODE_START")
         self:RegisterEvent("CHALLENGE_MODE_COMPLETED")
@@ -2844,9 +2957,16 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
     elseif event == "LFG_LIST_JOINED_GROUP" then
         -- You just joined someone else's group, so whatever key was on screen
         -- (a vote result, a shared key) is about the group you were in a moment
-        -- ago. Stand down and leave the field to the Group Finder reminder,
-        -- which is the one that is right now.
+        -- ago. Stand down, then remember this listing's dungeon for when the
+        -- group fills. a1 is the search result id, readable only right now.
         KeyPort.Hide()
+        CaptureJoinedGroup(a1)
+        KeyPort.CheckGroupFull()   -- it may already be complete
+        return
+
+    elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then
+        CaptureOwnListing()
+        KeyPort.CheckGroupFull()
         return
 
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -2893,6 +3013,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         if not IsInGroup() then
             wipe(recentMessages)
             wipe(keystones)      -- guild keys are not group state, so they stay
+            ForgetListing()
             if vote.active then ClearVote() end
             selection = nil
             if keyList then keyList:Hide() end
@@ -2900,6 +3021,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         elseif keyList and keyList:IsShown() then
             KeyPort.RefreshKeyList()   -- someone joined or left mid-pick
         end
+        KeyPort.CheckGroupFull()
         return
 
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -2907,7 +3029,7 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
         -- otherwise take it back after login.
         if event == "PLAYER_ENTERING_WORLD" then ClaimKeysCommand() end
         local inInstance, instanceType = IsInInstance()
-        if inInstance and instanceType == "party" then KeyPort.Hide() end
+        if inInstance and instanceType == "party" then KeyPort.Hide(); ForgetListing() end
         return
     end
 end)

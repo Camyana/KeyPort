@@ -106,6 +106,7 @@ The number is the **keystone level**: `/kp kr 10` means Kings' Rest, key level 1
 | `/kp list` | This season's codes (`/kp list all` for every dungeon) |
 | `/kp share` | Toggle whether you receive reminders from your group |
 | `/kp announce` | Toggle the party chat line sent when a key goes out |
+| `/kp full` | Toggle the reminder when a Group Finder group fills |
 | `/kp vote` | Choose keys for a ballot, then Start (`/kp vote 45` sets the length) |
 | `/kp vote all` | Skip the choosing and put every key up |
 | `/kp guild` | Open the list on the guild tab |
@@ -162,6 +163,14 @@ guessing.
 would rather keep that addon's window, `/kp keys auto` yields to whoever has it
 and `/kp keys off` leaves it alone; KeyPort remembers the previous owner, so it
 hands `/keys` straight back.
+
+### Group Finder groups
+
+Join a listed group, or advertise your own, and KeyPort remembers the dungeon
+from the listing. When the group fills, the teleport goes up on its own, with
+the key level attached if anyone in the group has reported that keystone.
+Nothing is broadcast and nothing is posted to chat: everyone running KeyPort
+watches their own group fill. `/kp full` turns it off.
 
 ### When it stays out of the way
 
