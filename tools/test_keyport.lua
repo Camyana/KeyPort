@@ -431,5 +431,61 @@ check(alone == 150, "the standalone default moved: " .. tostring(alone))
 check(math.abs(alone - shared) >= 143, "the two popups would still overlap")
 EUI_QOL_LOADED = false
 
+-- ===================================================== who gets credited ===
+section("a player who left is never credited")   -- regression, 1.8.1
+panel:Hide()
+KeyPortDB.fullPopup = true
+GROUP_LEADER_UNIT = nil
+SetParty({ { name = "Spreist", class = "PRIEST" }, { name = "Cira", class = "DRUID" } })
+fire("GROUP_ROSTER_UPDATE")
+fire("CHAT_MSG_ADDON", "LibKS", "15,249,3300", "PARTY", "Spreist-Draenor")
+SetParty({ { name = "Cira", class = "DRUID" } })          -- Spreist leaves
+fire("GROUP_ROSTER_UPDATE")
+fire("LFG_LIST_JOINED_GROUP", 77)
+SetParty({ { name = "Cira", class = "DRUID" }, { name = "Bobbo", class = "MAGE" },
+           { name = "Thessa", class = "ROGUE" }, { name = "Marn", class = "HUNTER" } })
+fire("CHAT_MSG_ADDON", "LibKS", "12,249,3000", "PARTY", "Bobbo-Draenor")
+fire("GROUP_ROSTER_UPDATE")
+check(panel._shown, "setup: the group filled and nothing appeared")
+check(not footer():find("Spreist"), "credited a player who left: " .. footer())
+check(footer() == "Bobbo's key, group is full", "wrong credit: " .. footer())
+check(dungeonText():find("%+12"), "the leaver's level was used: " .. dungeonText())
+
+section("the leader's key wins over a higher one")   -- regression, 1.8.1
+panel:Hide()
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Cira", class = "DRUID" } })
+fire("GROUP_ROSTER_UPDATE")
+fire("CHAT_MSG_ADDON", "LibKS", "11,249,3000", "PARTY", "Bobbo-Draenor")
+fire("CHAT_MSG_ADDON", "LibKS", "16,249,3000", "PARTY", "Cira-Draenor")
+GROUP_LEADER_UNIT = "party1"                               -- Bobbo listed it
+fire("LFG_LIST_JOINED_GROUP", 77)
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Cira", class = "DRUID" },
+           { name = "Thessa", class = "ROGUE" }, { name = "Marn", class = "HUNTER" } })
+fire("GROUP_ROSTER_UPDATE")
+check(footer() == "Bobbo's key, group is full", "the leader was passed over: " .. footer())
+check(dungeonText():find("%+11"), "the higher key's level was used: " .. dungeonText())
+GROUP_LEADER_UNIT = nil
+
+section("with no leader's key, the highest in the group is credited")
+panel:Hide()
+fire("LFG_LIST_JOINED_GROUP", 77)
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Cira", class = "DRUID" },
+           { name = "Thessa", class = "ROGUE" } })
+fire("GROUP_ROSTER_UPDATE")
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Cira", class = "DRUID" },
+           { name = "Thessa", class = "ROGUE" }, { name = "Marn", class = "HUNTER" } })
+fire("GROUP_ROSTER_UPDATE")
+check(footer() == "Cira's key, group is full", "wrong fallback credit: " .. footer())
+
+section("a name still resolving does not cost anyone their key")
+local keep = SetParty
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Unknown", class = "DRUID" } })
+fire("GROUP_ROSTER_UPDATE")
+SetParty({ { name = "Bobbo", class = "MAGE" }, { name = "Cira", class = "DRUID" } })
+fire("GROUP_ROSTER_UPDATE")
+KeyPort.OpenKeyList("PARTY")
+check(row("Cira") and tostring(row("Cira").dungeon:GetText()):find("%+16"),
+      "a key was pruned while its owner's name was still loading")
+
 print(("%d checks passed across %d groups"):format(passed, groups))
 print("ALL TESTS PASSED")

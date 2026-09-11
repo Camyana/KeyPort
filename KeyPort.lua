@@ -2414,13 +2414,20 @@ local function ForgetListing()
     pendingLFG = nil
 end
 
--- The best key in the party for that dungeon, if anyone has reported one.
+-- Whose key this group is running. Only people in the group right now are
+-- considered: the keystone store outlives the players in it, and crediting an
+-- applicant who joined and left is worse than crediting nobody. The leader
+-- wins, because a listing is for the lister's key; after that, the highest.
 local function PartyKeyFor(mapID)
     local bestLevel, owner
-    for name, key in pairs(keystones) do
-        if key.mapID == mapID and (key.level or 0) > 0 then
+    for _, member in ipairs(Roster()) do
+        local key = keystones[member.name]
+        if key and key.mapID == mapID and (key.level or 0) > 0 then
+            if UnitIsGroupLeader and UnitIsGroupLeader(member.unit) then
+                return key.level, member.name
+            end
             if not bestLevel or key.level > bestLevel then
-                bestLevel, owner = key.level, name
+                bestLevel, owner = key.level, member.name
             end
         end
     end
@@ -3018,8 +3025,25 @@ events:SetScript("OnEvent", function(self, event, a1, a2, a3, a4)
             selection = nil
             if keyList then keyList:Hide() end
             KeyPort.Hide()
-        elseif keyList and keyList:IsShown() then
-            KeyPort.RefreshKeyList()   -- someone joined or left mid-pick
+        else
+            -- Someone joined or left. Forget the keys of anyone who is gone,
+            -- so nothing downstream can credit them. Skipped while a name is
+            -- still resolving, rather than dropping a key that is about to
+            -- belong to someone again.
+            local present, settled = {}, true
+            for _, member in ipairs(Roster()) do
+                if not member.name or member.name == (UNKNOWNOBJECT or "Unknown") then
+                    settled = false
+                    break
+                end
+                present[member.name] = true
+            end
+            if settled then
+                for name in pairs(keystones) do
+                    if not present[name] then keystones[name] = nil end
+                end
+            end
+            if keyList and keyList:IsShown() then KeyPort.RefreshKeyList() end
         end
         KeyPort.CheckGroupFull()
         return

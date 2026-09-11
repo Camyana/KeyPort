@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.1
+
+- **Fixed the group-full reminder crediting the wrong player.** It picked the
+  highest key it had heard of for that dungeon, from anyone it had heard of,
+  and the party's keystones were only forgotten when you left the group
+  yourself. In a Group Finder group, where applicants come and go, that meant
+  someone who joined briefly and left could be credited, with their level.
+- Only people in the group right now are considered, and keys belonging to
+  anyone who leaves are forgotten as they go.
+- The group leader's key wins when more than one member holds that dungeon,
+  because a listing is for the lister's key. Failing that, the highest in the
+  group is credited.
+
 ## 1.8.0
 
 - **The reminder now fires when a Group Finder group fills.** The dungeon is

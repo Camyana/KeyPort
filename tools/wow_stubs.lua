@@ -178,6 +178,9 @@ function GetNumGroupMembers()
     return n
 end
 function InCombatLockdown() return COMBAT end
+GROUP_LEADER_UNIT = nil                -- "player", "party2", ... or nobody
+function UnitIsGroupLeader(unit) return unit ~= nil and unit == GROUP_LEADER_UNIT end
+UNKNOWNOBJECT = "Unknown"
 function Ambiguate(name, mode)
     if mode == "none" then return name end            -- LibKeystone wants the realm kept
     return (name:match("^([^%-]+)")) or name
